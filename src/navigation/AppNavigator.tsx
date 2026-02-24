@@ -10,6 +10,7 @@ import ActivityScreen from '../screens/ActivityScreen';
 import DevicesScreen from '../screens/DevicesScreen';
 import AccessRequestsScreen from '../screens/AccessRequestsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import CreateChildAccountScreen from '../screens/CreateChildAccountScreen';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -18,6 +19,7 @@ export type RootStackParamList = {
   Devices: undefined;
   AccessRequests: undefined;
   Settings: undefined;
+  CreateChildAccount: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -74,6 +76,11 @@ export const AppNavigator = () => {
               name="Settings" 
               component={SettingsScreen}
               options={{ title: 'Cài đặt' }}
+            />
+            <Stack.Screen 
+              name="CreateChildAccount" 
+              component={CreateChildAccountScreen}
+              options={{ title: 'Tạo tài khoản trẻ em' }}
             />
           </>
         )}
