@@ -27,6 +27,7 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
     { title: 'Thiết bị', screen: 'Devices', icon: '📱' },
     { title: 'Yêu cầu truy cập', screen: 'AccessRequests', icon: '✅' },
     { title: 'Cài đặt', screen: 'Settings', icon: '⚙️' },
+    { title: 'Tạo tài khoản trẻ em', screen: 'CreateChildAccount', icon: '👶' },
   ];
 
   return (
