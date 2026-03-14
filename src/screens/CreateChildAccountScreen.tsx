@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
+import { createChildAccount } from '../api/children';
 
 const { width } = Dimensions.get('window');
 
@@ -24,39 +25,111 @@ type CreateChildAccountScreenProps = {
 
 const CreateChildAccountScreen = ({ navigation }: CreateChildAccountScreenProps) => {
   const [childName, setChildName] = useState('');
-  const [childEmail, setChildEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [childPassword, setChildPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [age, setAge] = useState('');
+  const [errors, setErrors] = useState({
+    childName: '',
+    username: '',
+    childPassword: '',
+    confirmPassword: '',
+  });
   const [isLoading, setIsLoading] = useState(false);
 
+  const validateField = (field: keyof typeof errors, value: string) => {
+    let error = '';
+    
+    switch (field) {
+      case 'childName':
+        if (!value.trim()) {
+          error = 'Tên trẻ không được để trống';
+        } else if (value.trim().length < 2) {
+          error = 'Tên trẻ phải có ít nhất 2 ký tự';
+        } else if (value.length > 100) {
+          error = 'Tên trẻ không được quá 100 ký tự';
+        }
+        break;
+      case 'username':
+        if (!value.trim()) {
+          error = 'Tên đăng nhập không được để trống';
+        } else if (value.length < 3) {
+          error = 'Tên đăng nhập phải có ít nhất 3 ký tự';
+        } else if (value.length > 50) {
+          error = 'Tên đăng nhập không được quá 50 ký tự';
+        }
+        break;
+      case 'childPassword':
+        if (!value) {
+          error = 'Mật khẩu không được để trống';
+        } else if (value.length < 6) {
+          error = 'Mật khẩu phải có ít nhất 6 ký tự';
+        } else if (value.length > 100) {
+          error = 'Mật khẩu không được quá 100 ký tự';
+        }
+        break;
+      case 'confirmPassword':
+        if (!value) {
+          error = 'Xác nhận mật khẩu không được để trống';
+        } else if (value !== childPassword) {
+          error = 'Mật khẩu xác nhận không khớp';
+        }
+        break;
+    }
+    
+    setErrors(prev => ({ ...prev, [field]: error }));
+    return error === '';
+  };
+
+  const validateForm = () => {
+    const fields: (keyof typeof errors)[] = ['childName', 'username', 'childPassword', 'confirmPassword'];
+    let isValid = true;
+    
+    fields.forEach(field => {
+      const value = field === 'childName' ? childName : 
+                     field === 'username' ? username :
+                     field === 'childPassword' ? childPassword : confirmPassword;
+      if (!validateField(field, value)) {
+        isValid = false;
+      }
+    });
+    
+    return isValid;
+  };
+
   const handleCreateAccount = async () => {
-    if (!childName || !childEmail || !childPassword || !confirmPassword || !age) {
-      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin.');
-      return;
-    }
-
-    if (childPassword !== confirmPassword) {
-      Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp.');
-      return;
-    }
-
-    if (parseInt(age) < 5 || parseInt(age) > 18) {
-      Alert.alert('Lỗi', 'Tuổi phải từ 5 đến 18 tuổi.');
+    if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
     
     try {
-      // TODO: Implement account creation logic here
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await createChildAccount({
+        childName,
+        username,
+        password: childPassword,
+      });
       
-      Alert.alert('Thành công', `Đã tạo tài khoản cho ${childName}`);
-      navigation.goBack();
-    } catch (error) {
-      Alert.alert('Lỗi', 'Không thể tạo tài khoản. Vui lòng thử lại.');
+      if (response.success) {
+        Alert.alert(
+          'Thành công', 
+          `Đã tạo tài khoản cho ${childName}\nTên đăng nhập: ${username}`,
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack()
+            }
+          ]
+        );
+      } else {
+        // Show error inline instead of Alert
+        const errorMessage = response.message || 'Không thể tạo tài khoản';
+        setErrors(prev => ({ ...prev, username: errorMessage }));
+      }
+    } catch (error: any) {
+      // Show error inline instead of Alert
+      const errorMessage = error.message || 'Không thể tạo tài khoản. Vui lòng thử lại.';
+      setErrors(prev => ({ ...prev, username: errorMessage }));
     } finally {
       setIsLoading(false);
     }
@@ -83,61 +156,68 @@ const CreateChildAccountScreen = ({ navigation }: CreateChildAccountScreenProps)
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Tên của trẻ</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, errors.childName && styles.inputError]}
                   placeholder="Nhập tên đầy đủ"
                   value={childName}
-                  onChangeText={setChildName}
+                  onChangeText={(text) => {
+                    setChildName(text);
+                    if (errors.childName) validateField('childName', text);
+                  }}
+                  onBlur={() => validateField('childName', childName)}
                   editable={!isLoading}
                 />
+                {errors.childName ? <Text style={styles.errorText}>{errors.childName}</Text> : null}
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Email của trẻ</Text>
+                <Text style={styles.label}>Tên đăng nhập</Text>
                 <TextInput
-                  style={styles.input}
-                  placeholder="email@example.com"
-                  value={childEmail}
-                  onChangeText={setChildEmail}
-                  keyboardType="email-address"
+                  style={[styles.input, errors.username && styles.inputError]}
+                  placeholder="username"
+                  value={username}
+                  onChangeText={(text) => {
+                    setUsername(text);
+                    if (errors.username) validateField('username', text);
+                  }}
+                  onBlur={() => validateField('username', username)}
                   autoCapitalize="none"
                   editable={!isLoading}
                 />
-              </View>
-
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>Tuổi</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="5-18 tuổi"
-                  value={age}
-                  onChangeText={setAge}
-                  keyboardType="numeric"
-                  editable={!isLoading}
-                />
+                {errors.username ? <Text style={styles.errorText}>{errors.username}</Text> : null}
               </View>
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Mật khẩu</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, errors.childPassword && styles.inputError]}
                   placeholder="••••••••"
                   value={childPassword}
-                  onChangeText={setChildPassword}
+                  onChangeText={(text) => {
+                    setChildPassword(text);
+                    if (errors.childPassword) validateField('childPassword', text);
+                  }}
+                  onBlur={() => validateField('childPassword', childPassword)}
                   secureTextEntry
                   editable={!isLoading}
                 />
+                {errors.childPassword ? <Text style={styles.errorText}>{errors.childPassword}</Text> : null}
               </View>
 
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Xác nhận mật khẩu</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, errors.confirmPassword && styles.inputError]}
                   placeholder="••••••••"
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    if (errors.confirmPassword) validateField('confirmPassword', text);
+                  }}
+                  onBlur={() => validateField('confirmPassword', confirmPassword)}
                   secureTextEntry
                   editable={!isLoading}
                 />
+                {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
               </View>
 
               <TouchableOpacity
@@ -214,6 +294,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     fontSize: 16,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    backgroundColor: 'rgba(255, 240, 240, 0.5)',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+    fontWeight: '500',
   },
   button: {
     backgroundColor: COLORS.primary,

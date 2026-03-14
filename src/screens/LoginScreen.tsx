@@ -12,28 +12,67 @@ import {
   Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../utils/constants';
 
 const { width } = Dimensions.get('window');
 
-const LoginScreen = () => {
-  const [email, setEmail] = useState('');
+type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
+
+interface Props {
+  navigation: LoginScreenNavigationProp;
+}
+
+const LoginScreen: React.FC<Props> = ({ navigation }) => {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState({ username: '', password: '' });
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
 
+  const validateField = (field: 'username' | 'password', value: string) => {
+    let error = '';
+    
+    if (field === 'username') {
+      if (!value.trim()) {
+        error = 'Tên đăng nhập không được để trống';
+      } else if (value.length < 3) {
+        error = 'Tên đăng nhập phải có ít nhất 3 ký tự';
+      } else if (value.length > 50) {
+        error = 'Tên đăng nhập không được quá 50 ký tự';
+      }
+    } else if (field === 'password') {
+      if (!value) {
+        error = 'Mật khẩu không được để trống';
+      } else if (value.length < 6) {
+        error = 'Mật khẩu phải có ít nhất 6 ký tự';
+      }
+    }
+    
+    setErrors(prev => ({ ...prev, [field]: error }));
+    return error === '';
+  };
+
+  const validateForm = () => {
+    const usernameValid = validateField('username', username);
+    const passwordValid = validateField('password', password);
+    return usernameValid && passwordValid;
+  };
+
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ thông tin');
+    if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
     try {
-      await login(email, password);
-    } catch (error) {
-      Alert.alert('Lỗi', 'Đăng nhập thất bại. Vui lòng thử lại.');
+      await login(username, password);
+      Alert.alert('Thành công', 'Đăng nhập thành công!');
+    } catch (error: any) {
+      const errorMessage = error.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
+      setErrors(prev => ({ ...prev, password: errorMessage }));
     } finally {
       setIsLoading(false);
     }
@@ -65,28 +104,37 @@ const LoginScreen = () => {
 
           <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>Tên đăng nhập</Text>
               <TextInput
-                style={styles.input}
-                placeholder="example@email.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
+                style={[styles.input, errors.username && styles.inputError]}
+                placeholder="username"
+                value={username}
+                onChangeText={(text) => {
+                  setUsername(text);
+                  if (errors.username) validateField('username', text);
+                }}
+                onBlur={() => validateField('username', username)}
                 autoCapitalize="none"
                 editable={!isLoading}
               />
+              {errors.username ? <Text style={styles.errorText}>{errors.username}</Text> : null}
             </View>
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Mật khẩu</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, errors.password && styles.inputError]}
                 placeholder="••••••••"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(text) => {
+                  setPassword(text);
+                  if (errors.password) validateField('password', text);
+                }}
+                onBlur={() => validateField('password', password)}
                 secureTextEntry
                 editable={!isLoading}
               />
+              {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
 
             <TouchableOpacity
@@ -102,6 +150,13 @@ const LoginScreen = () => {
             <TouchableOpacity style={styles.forgotPassword}>
               <Text style={styles.forgotPasswordText}>Quên mật khẩu?</Text>
             </TouchableOpacity>
+
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Chưa có tài khoản? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+                <Text style={styles.registerLink}>Đăng ký ngay</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -153,16 +208,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFFFFF',
+    color: '#1f2937',
     marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   subtitle: {
     fontSize: 16,
-    color: '#FFFFFF',
-    opacity: 0.95,
+    color: '#374151',
+    opacity: 1,
   },
   form: {
     width: '100%',
@@ -189,6 +244,17 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    backgroundColor: 'rgba(255, 240, 240, 0.95)',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 13,
+    marginTop: 6,
+    marginLeft: 4,
+    fontWeight: '500',
   },
   button: {
     height: 56,
@@ -218,12 +284,25 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   forgotPasswordText: {
-    color: '#FFFFFF',
+    color: '#1f2937',
     fontSize: 14,
     fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+  },
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  footerText: {
+    fontSize: 14,
+    color: '#1f2937',
+  },
+  registerLink: {
+    fontSize: 14,
+    color: '#3b82f6',
+    fontWeight: 'bold',
+    textDecorationLine: 'underline',
   },
 });
 
