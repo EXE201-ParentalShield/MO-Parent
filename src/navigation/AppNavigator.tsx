@@ -13,8 +13,12 @@ import AccessRequestsScreen from '../screens/AccessRequestsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CreateChildAccountScreen from '../screens/CreateChildAccountScreen';
 import AddDeviceScreen from '../screens/AddDeviceScreen';
+import UpgradePackageScreen from '../screens/UpgradePackageScreen';
+import PaymentResultScreen from '../screens/PaymentResultScreen';
+import FeatureIntroductionScreen from '../screens/FeatureIntroductionScreen';
 
 export type RootStackParamList = {
+  FeatureIntroduction: undefined;
   Login: undefined;
   Register: undefined;
   Dashboard: undefined;
@@ -24,6 +28,14 @@ export type RootStackParamList = {
   Settings: undefined;
   CreateChildAccount: undefined;
   AddDevice: undefined;
+  UpgradePackage: undefined;
+  PaymentResult: {
+    success: boolean;
+    packageName?: string;
+    amount?: string;
+    transactionNo?: string;
+    paidAt?: string;
+  };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -38,6 +50,7 @@ export const AppNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
+        initialRouteName={isAuthenticated ? 'Dashboard' : 'FeatureIntroduction'}
         screenOptions={{
           headerStyle: {
             backgroundColor: '#3b82f6',
@@ -50,6 +63,11 @@ export const AppNavigator = () => {
       >
         {!isAuthenticated ? (
           <>
+            <Stack.Screen 
+              name="FeatureIntroduction" 
+              component={FeatureIntroductionScreen}
+              options={{ headerShown: false }}
+            />
             <Stack.Screen 
               name="Login" 
               component={LoginScreen}
@@ -97,6 +115,16 @@ export const AppNavigator = () => {
               name="AddDevice" 
               component={AddDeviceScreen}
               options={{ title: 'Thêm thiết bị' }}
+            />
+            <Stack.Screen 
+              name="UpgradePackage" 
+              component={UpgradePackageScreen}
+              options={{ title: 'Nâng cấp gói' }}
+            />
+            <Stack.Screen 
+              name="PaymentResult" 
+              component={PaymentResultScreen}
+              options={{ title: 'Kết quả thanh toán' }}
             />
           </>
         )}
