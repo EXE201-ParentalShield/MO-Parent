@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../utils/constants';
 
@@ -9,7 +9,21 @@ const SettingsScreen = () => {
   const [safeMode, setSafeMode] = React.useState(true);
 
   const handleLogout = async () => {
-    await logout();
+    Alert.alert(
+      'Xác nhận',
+      'Bạn có chắc muốn đăng xuất?',
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Đăng xuất',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+            Alert.alert('Thành công', 'Đã đăng xuất!');
+          }
+        }
+      ]
+    );
   };
 
   return (
@@ -20,7 +34,7 @@ const SettingsScreen = () => {
           <View style={styles.card}>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Tên:</Text>
-              <Text style={styles.infoValue}>{user?.name}</Text>
+              <Text style={styles.infoValue}>{user?.fullName}</Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Email:</Text>

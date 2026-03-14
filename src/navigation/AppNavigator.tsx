@@ -5,21 +5,25 @@ import { useAuth } from '../contexts/AuthContext';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import ActivityScreen from '../screens/ActivityScreen';
 import DevicesScreen from '../screens/DevicesScreen';
 import AccessRequestsScreen from '../screens/AccessRequestsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CreateChildAccountScreen from '../screens/CreateChildAccountScreen';
+import AddDeviceScreen from '../screens/AddDeviceScreen';
 
 export type RootStackParamList = {
   Login: undefined;
+  Register: undefined;
   Dashboard: undefined;
   Activity: undefined;
   Devices: undefined;
   AccessRequests: undefined;
   Settings: undefined;
   CreateChildAccount: undefined;
+  AddDevice: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -45,11 +49,18 @@ export const AppNavigator = () => {
         }}
       >
         {!isAuthenticated ? (
-          <Stack.Screen 
-            name="Login" 
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
+          <>
+            <Stack.Screen 
+              name="Login" 
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="Register" 
+              component={RegisterScreen}
+              options={{ headerShown: false }}
+            />
+          </>
         ) : (
           <>
             <Stack.Screen 
@@ -81,6 +92,11 @@ export const AppNavigator = () => {
               name="CreateChildAccount" 
               component={CreateChildAccountScreen}
               options={{ title: 'Tạo tài khoản trẻ em' }}
+            />
+            <Stack.Screen 
+              name="AddDevice" 
+              component={AddDeviceScreen}
+              options={{ title: 'Thêm thiết bị' }}
             />
           </>
         )}

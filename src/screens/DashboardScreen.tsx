@@ -1,25 +1,97 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
+import { getParentDevices, Device } from '../api/devices';
+import { getPendingRequests, AccessRequest } from '../api/requests';
+import { getUsageSessions, UsageSession } from '../api/usageSessions';
 
 type DashboardScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 };
 
 const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
+  const [usageSessions, setUsageSessions] = useState<UsageSession[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboardData();
+    }, [])
+  );
+
+  const loadDashboardData = async () => {
+    try {
+      if (!isRefreshing) setIsLoading(true);
+      
+      // Fetch all data in parallel
+      const [devicesData, requestsData] = await Promise.all([
+        getParentDevices(),
+        getPendingRequests(),
+      ]);
+
+      setDevices(devicesData);
+      setPendingRequests(requestsData);
+
+      // Get usage sessions for all devices (last 7 days)
+      if (devicesData.length > 0) {
+        const allSessions: UsageSession[] = [];
+        const fromDate = new Date();
+        fromDate.setDate(fromDate.getDate() - 7);
+        
+        for (const device of devicesData) {
+          try {
+            const sessions = await getUsageSessions(device.deviceId, fromDate.toISOString());
+            allSessions.push(...sessions);
+          } catch (error) {
+            console.log(`[Dashboard] Could not load sessions for device ${device.deviceId}`);
+          }
+        }
+        setUsageSessions(allSessions);
+      }
+    } catch (error) {
+      console.error('[Dashboard] Error loading data:', error);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    loadDashboardData();
+  };
+
+  // Calculate stats
+  const activeDevicesCount = devices.filter(d => 
+    d.status.toLowerCase() === 'active' || d.status === '1'
+  ).length;
+  const pendingRequestsCount = pendingRequests.length;
+  
+  const totalScreenTimeMinutes = usageSessions.reduce((total, session) => {
+    const used = session.allowedMinutes - session.remainingMinutes;
+    return total + used;
+  }, 0);
+  const totalScreenTimeHours = (totalScreenTimeMinutes / 60).toFixed(1);
+
   const stats = [
-    { label: 'Thời gian màn hình', value: '4.2h', color: COLORS.primary },
-    { label: 'Trang web bị chặn', value: '97', color: COLORS.danger },
-    { label: 'Yêu cầu chờ duyệt', value: '3', color: COLORS.warning },
-    { label: 'Thiết bị đang hoạt động', value: '2', color: COLORS.success },
+    { label: 'Thời gian màn hình', value: `${totalScreenTimeHours}h`, color: COLORS.primary },
+    { label: 'Trang web bị chặn', value: '97', color: COLORS.danger }, // Mock data
+    { label: 'Yêu cầu chờ duyệt', value: pendingRequestsCount.toString(), color: COLORS.warning },
+    { label: 'Thiết bị đang hoạt động', value: activeDevicesCount.toString(), color: COLORS.success },
   ];
 
   const menuItems = [
@@ -30,51 +102,126 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
     { title: 'Tạo tài khoản trẻ em', screen: 'CreateChildAccount', icon: '👶' },
   ];
 
+  // Generate recent activity from real data
+  const getRecentActivities = () => {
+    const activities = [];
+
+    // Add recent sessions
+    const recentSessions = [...usageSessions]
+      .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+      .slice(0, 2);
+    
+    for (const session of recentSessions) {
+      const device = devices.find(d => d.deviceId === session.deviceId);
+      if (device) {
+        const timeAgo = getTimeAgo(new Date(session.startTime));
+        const statusText = session.status.toLowerCase() === 'active' 
+          ? 'đang sử dụng thiết bị' 
+          : 'đã sử dụng thiết bị';
+        activities.push({
+          text: `📱 ${device.childName} ${statusText}`,
+          time: timeAgo,
+        });
+      }
+    }
+
+    // Add recent pending requests
+    const recentRequests = [...pendingRequests]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 1);
+    
+    for (const request of recentRequests) {
+      activities.push({
+        text: `⏳ Yêu cầu mới: ${request.requestedMinutes} phút - "${request.reason}"`,
+        time: getTimeAgo(new Date(request.createdAt)),
+      });
+    }
+
+    // Add mock blocked activity if not enough real data
+    if (activities.length < 3) {
+      activities.push({
+        text: '🚫 Đã chặn truy cập tới Facebook',
+        time: '15 phút trước',
+      });
+    }
+
+    return activities.slice(0, 3);
+  };
+
+  const getTimeAgo = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins} phút trước`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} giờ trước`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} ngày trước`;
+  };
+
+  const recentActivities = getRecentActivities();
+
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+      }
+    >
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.greeting}>Xin chào, Phụ Huynh!</Text>
           <Text style={styles.subtitle}>Tổng quan về hoạt động của con bạn</Text>
         </View>
 
-        <View style={styles.statsGrid}>
-          {stats.map((stat, index) => (
-            <View key={index} style={[styles.statCard, { borderLeftColor: stat.color }]}>
-              <Text style={styles.statValue}>{stat.value}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.statsGrid}>
+              {stats.map((stat, index) => (
+                <View key={index} style={[styles.statCard, { borderLeftColor: stat.color }]}>
+                  <Text style={styles.statValue}>{stat.value}</Text>
+                  <Text style={styles.statLabel}>{stat.label}</Text>
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
 
-        <View style={styles.menuGrid}>
-          {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.menuItem}
-              onPress={() => navigation.navigate(item.screen as any)}
-            >
-              <Text style={styles.menuIcon}>{item.icon}</Text>
-              <Text style={styles.menuTitle}>{item.title}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+            <View style={styles.menuGrid}>
+              {menuItems.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.menuItem}
+                  onPress={() => navigation.navigate(item.screen as any)}
+                >
+                  <Text style={styles.menuIcon}>{item.icon}</Text>
+                  <Text style={styles.menuTitle}>{item.title}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
-        <View style={styles.recentActivity}>
-          <Text style={styles.sectionTitle}>Hoạt động gần đây</Text>
-          <View style={styles.activityCard}>
-            <Text style={styles.activityText}>📱 Thanh Tùng đã sử dụng YouTube Kids</Text>
-            <Text style={styles.activityTime}>5 phút trước</Text>
-          </View>
-          <View style={styles.activityCard}>
-            <Text style={styles.activityText}>🚫 Đã chặn truy cập tới Facebook</Text>
-            <Text style={styles.activityTime}>15 phút trước</Text>
-          </View>
-          <View style={styles.activityCard}>
-            <Text style={styles.activityText}>✅ Đã duyệt yêu cầu sử dụng Messenger Kids</Text>
-            <Text style={styles.activityTime}>1 giờ trước</Text>
-          </View>
-        </View>
+            <View style={styles.recentActivity}>
+              <Text style={styles.sectionTitle}>Hoạt động gần đây</Text>
+              {recentActivities.length > 0 ? (
+                recentActivities.map((activity, index) => (
+                  <View key={index} style={styles.activityCard}>
+                    <Text style={styles.activityText}>{activity.text}</Text>
+                    <Text style={styles.activityTime}>{activity.time}</Text>
+                  </View>
+                ))
+              ) : (
+                <View style={styles.emptyActivity}>
+                  <Text style={styles.emptyText}>Chưa có hoạt động nào</Text>
+                </View>
+              )}
+            </View>
+          </>
+        )}
       </View>
     </ScrollView>
   );
@@ -186,6 +333,25 @@ const styles = StyleSheet.create({
   },
   activityTime: {
     fontSize: 12,
+    color: COLORS.textSecondary,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+  },
+  emptyActivity: {
+    backgroundColor: '#fff',
+    padding: 32,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
     color: COLORS.textSecondary,
   },
 });
