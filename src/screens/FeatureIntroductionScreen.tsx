@@ -10,6 +10,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../utils/constants';
 
 type FeatureIntroductionScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'FeatureIntroduction'>;
@@ -49,9 +51,14 @@ const FeatureIntroductionScreen = ({ navigation }: FeatureIntroductionScreenProp
     },
   ];
 
-  const handleStartTrial = () => {
-    // Xử lý bắt đầu trial 7 ngày
-    // Sau khi đăng ký thành công, chuyển đến màn hình đăng ký hoặc đăng nhập
+  const handleStartTrial = async () => {
+    try {
+      const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = settingsStr ? JSON.parse(settingsStr) : {};
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const newSettings = { ...settings, trialExpiresAt: expiresAt };
+      await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(newSettings));
+    } catch {}
     navigation.navigate('Login');
   };
 

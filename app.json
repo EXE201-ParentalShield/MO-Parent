@@ -4,6 +4,7 @@
     "slug": "shield-parent-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "shieldfamily",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
