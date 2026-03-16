@@ -98,6 +98,7 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   const menuItems = [
     { title: 'Hoạt động', screen: 'Activity', icon: '📊' },
     { title: 'Thiết bị', screen: 'Devices', icon: '📱' },
+    { title: 'Video', screen: 'Videos', icon: '🎬' },
     { title: 'Yêu cầu truy cập', screen: 'AccessRequests', icon: '✅' },
     { title: 'Cài đặt', screen: 'Settings', icon: '⚙️' },
     { title: 'Tạo tài khoản trẻ em', screen: 'CreateChildAccount', icon: '👶' },

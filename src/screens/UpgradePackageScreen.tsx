@@ -14,6 +14,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
 import { storage } from '../utils/storage';
+import * as ExpoLinking from 'expo-linking';
 
 type UpgradePackageScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'UpgradePackage'>;
@@ -29,23 +30,24 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
 
   const API_BASE_URL = 'https://be-ikk8.onrender.com';
 
-  const handlePaymentResult = (data: any, success: boolean) => {
-    // Dừng polling
+  const clearPaymentState = () => {
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
     }
-    // Xóa pending refs
     pendingPaymentIdRef.current = null;
     pendingTokenRef.current = null;
     setIsWaitingPayment(false);
+  };
+
+  const handlePaymentResult = (data: any, success: boolean) => {
+    clearPaymentState();
 
     if (success) {
       navigation.navigate('PaymentResult', {
         success: true,
         packageName: data?.data?.description || 'Gói dịch vụ',
-        amount:
-          new Intl.NumberFormat('vi-VN').format(data?.data?.amount) + 'đ',
+        amount: new Intl.NumberFormat('vi-VN').format(data?.data?.amount) + 'đ',
         transactionNo: data?.data?.providerTransactionNo,
         paidAt: data?.data?.paidAt,
       });
@@ -82,6 +84,43 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
       return 'Pending';
     }
   };
+
+  // Deep Link listener
+  React.useEffect(() => {
+    const handleDeepLink = (url: string) => {
+      if (!url.includes('payment-result')) return;
+
+      const query = url.split('?')[1] || '';
+      const params = Object.fromEntries(
+        query.split('&').map(p => {
+          const [k, v] = p.split('=');
+          return [k, decodeURIComponent(v || '')];
+        })
+      );
+
+      clearPaymentState();
+
+      navigation.navigate('PaymentResult', {
+        success: params.status === 'Success',
+        packageName: params.packageName || 'Gói dịch vụ',
+        amount: params.amount || '',
+        transactionNo: params.transactionNo,
+        paidAt: params.paidAt,
+      });
+    };
+
+    // App đang mở → nhận Deep Link
+    const deepLinkSub = RNLinking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    // App bị tắt → được mở lại bằng Deep Link
+    RNLinking.getInitialURL().then((url) => {
+      if (url) handleDeepLink(url);
+    });
+
+    return () => deepLinkSub.remove();
+  }, []);
 
   // AppState listener — kích hoạt ngay khi user quay lại app
   React.useEffect(() => {
@@ -205,6 +244,10 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
       const amount = Number(String(pkg.price).replace(/[^\d]/g, '')) || 0;
       const orderId = `ORDER-${Date.now()}`;
 
+      // Lấy returnUrl động theo môi trường
+      const returnUrl = ExpoLinking.createURL('payment-result');
+      console.log('returnUrl:', returnUrl);
+
       const res = await fetch(`${API_BASE_URL}/api/Payment/vnpay-create`, {
         method: 'POST',
         headers: {
@@ -217,6 +260,7 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
           orderId,
           description: `Nâng cấp ${pkg.name}`,
           provider: 1,
+          returnUrl,
         }),
       });
 
@@ -242,18 +286,14 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
 
       const supported = await RNLinking.canOpenURL(paymentUrl);
       if (!supported)
-        throw new Error(
-          'Thiết bị không thể mở trình duyệt cho URL thanh toán'
-        );
+        throw new Error('Thiết bị không thể mở trình duyệt cho URL thanh toán');
 
       await RNLinking.openURL(paymentUrl);
 
       if (paymentId && token) {
-        // Lưu để AppState handler dùng khi user quay lại app
         pendingPaymentIdRef.current = paymentId;
         pendingTokenRef.current = token;
         setIsWaitingPayment(true);
-        // Polling làm backup mỗi 5 giây
         startPolling(paymentId, token);
       }
     } catch (e: any) {
@@ -274,11 +314,7 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
           </Text>
           <TouchableOpacity
             onPress={() => {
-              if (pollingRef.current) clearInterval(pollingRef.current);
-              pollingRef.current = null;
-              pendingPaymentIdRef.current = null;
-              pendingTokenRef.current = null;
-              setIsWaitingPayment(false);
+              clearPaymentState();
             }}
           >
             <Text style={styles.waitingCancel}>Hủy</Text>
@@ -328,8 +364,7 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
                   styles.upgradeButton,
                   {
                     backgroundColor: pkg.color,
-                    opacity:
-                      loadingId === pkg.id || isWaitingPayment ? 0.7 : 1,
+                    opacity: loadingId === pkg.id || isWaitingPayment ? 0.7 : 1,
                   },
                 ]}
                 onPress={() => handleUpgrade(pkg)}
