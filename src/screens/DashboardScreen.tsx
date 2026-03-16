@@ -26,6 +26,7 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   const [usageSessions, setUsageSessions] = useState<UsageSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showTrialBanner, setShowTrialBanner] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -205,6 +206,28 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
               ))}
             </View>
 
+            {showTrialBanner && (
+              <View style={styles.trialBanner}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.trialTitle}>🎁 Đang dùng thử 7 ngày</Text>
+                  <Text style={styles.trialText}>
+                    Nâng cấp để tiếp tục sử dụng đầy đủ tính năng sau thời gian dùng thử.
+                  </Text>
+                </View>
+                <View style={styles.trialActions}>
+                  <TouchableOpacity
+                    style={styles.trialUpgradeButton}
+                    onPress={() => navigation.navigate('UpgradePackage')}
+                  >
+                    <Text style={styles.trialUpgradeText}>Nâng cấp</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setShowTrialBanner(false)}>
+                    <Text style={styles.trialDismissText}>Bỏ qua</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             <View style={styles.recentActivity}>
               <Text style={styles.sectionTitle}>Hoạt động gần đây</Text>
               {recentActivities.length > 0 ? (
@@ -343,6 +366,50 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 14,
     color: COLORS.textSecondary,
+  },
+  trialBanner: {
+    backgroundColor: '#e8f4ff',
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.primary,
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  trialTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: 4,
+  },
+  trialText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
+  trialActions: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  trialUpgradeButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  trialUpgradeText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  trialDismissText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    textDecorationLine: 'underline',
   },
   emptyActivity: {
     backgroundColor: '#fff',
