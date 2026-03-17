@@ -4,11 +4,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   StyleSheet,
   Alert,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Keyboard,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -38,8 +40,6 @@ const AddDeviceScreen: React.FC<Props> = ({ navigation }) => {
     childPassword: '',
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [showDeviceTypePicker, setShowDeviceTypePicker] = useState(false);
-
   const validateField = (field: keyof typeof errors, value: string) => {
     let error = '';
     
@@ -155,16 +155,19 @@ const AddDeviceScreen: React.FC<Props> = ({ navigation }) => {
       locations={[0, 0.3, 1]}
       style={styles.gradient}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 12}
+          style={styles.container}
         >
-          <View style={styles.content}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+          >
+            <View style={styles.content}>
             <View style={styles.header}>
               <Text style={styles.title}>Thêm thiết bị mới</Text>
               <Text style={styles.subtitle}>Liên kết thiết bị với tài khoản trẻ em</Text>
@@ -293,9 +296,10 @@ const AddDeviceScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.secondaryButtonText}>Hủy</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </TouchableWithoutFeedback>
     </LinearGradient>
   );
 };
@@ -309,9 +313,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    paddingBottom: 28,
   },
   content: {
-    flex: 1,
     padding: 24,
     paddingTop: 40,
   },

@@ -135,6 +135,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         formData.email,
         formData.phoneNumber
       );
+      // Registration successful, navigate to Trial screen
+      navigation.replace('Trial');
     } catch (error: any) {
       const errorMessage = error.message || 'Đăng ký thất bại. Vui lòng thử lại.';
       // Set general error on password field
