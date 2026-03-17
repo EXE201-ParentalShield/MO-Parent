@@ -10,12 +10,14 @@ import {
   Platform,
   Alert,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../utils/constants';
+import { getFreeTrialStatus } from '../api/freeTrial';
 
 const { width } = Dimensions.get('window');
 
@@ -69,7 +71,29 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setIsLoading(true);
     try {
       await login(username, password);
-      Alert.alert('Thành công', 'Đăng nhập thành công!');
+      
+      console.log('[Login] Login successful, checking trial status...');
+      
+      // Check trial status để quyết định navigate đi đâu
+      try {
+        const trialStatus = await getFreeTrialStatus();
+        console.log('[Login] Trial status:', JSON.stringify(trialStatus, null, 2));
+        
+        if (trialStatus.hasTrial) {
+          // Đã có trial (dù active hay expired) → Dashboard
+          console.log('[Login] User has trial, navigating to Dashboard');
+          navigation.replace('Dashboard');
+        } else {
+          // Chưa có trial → Trial screen
+          console.log('[Login] User has no trial, navigating to Trial');
+          navigation.replace('Trial');
+        }
+      } catch (trialError) {
+        console.error('[Login] Error checking trial:', trialError);
+        // Nếu lỗi khi check trial, vào Dashboard
+        navigation.replace('Dashboard');
+      }
+      
     } catch (error: any) {
       const errorMessage = error.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
       setErrors(prev => ({ ...prev, password: errorMessage }));

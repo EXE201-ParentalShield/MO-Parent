@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import TrialScreen from '../screens/TrialScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import ActivityScreen from '../screens/ActivityScreen';
 import DevicesScreen from '../screens/DevicesScreen';
@@ -21,6 +22,7 @@ export type RootStackParamList = {
   FeatureIntroduction: undefined;
   Login: undefined;
   Register: undefined;
+  Trial: undefined;
   Dashboard: undefined;
   Activity: undefined;
   Devices: undefined;
@@ -50,7 +52,8 @@ export const AppNavigator = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator
-        initialRouteName={isAuthenticated ? 'Dashboard' : 'FeatureIntroduction'}
+        key={isAuthenticated ? 'authenticated' : 'unauthenticated'}
+        initialRouteName={isAuthenticated ? 'Dashboard' : 'Login'}
         screenOptions={{
           headerStyle: {
             backgroundColor: '#3b82f6',
@@ -78,9 +81,19 @@ export const AppNavigator = () => {
               component={RegisterScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen 
+              name="Trial" 
+              component={TrialScreen}
+              options={{ headerShown: false }}
+            />
           </>
         ) : (
           <>
+            <Stack.Screen 
+              name="Trial" 
+              component={TrialScreen}
+              options={{ headerShown: false }}
+            />
             <Stack.Screen 
               name="Dashboard" 
               component={DashboardScreen}

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,6 +16,7 @@ import { COLORS } from '../utils/constants';
 import { getParentDevices, Device } from '../api/devices';
 import { getPendingRequests, AccessRequest } from '../api/requests';
 import { getUsageSessions, UsageSession } from '../api/usageSessions';
+import { getFreeTrialStatus, FreeTrialStatus } from '../api/freeTrial';
 
 type DashboardScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -26,7 +28,7 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   const [usageSessions, setUsageSessions] = useState<UsageSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showTrialBanner, setShowTrialBanner] = useState(true);
+  const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -38,14 +40,25 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
     try {
       if (!isRefreshing) setIsLoading(true);
       
+      console.log('[Dashboard] Loading dashboard data...');
+      
       // Fetch all data in parallel
-      const [devicesData, requestsData] = await Promise.all([
+      const [devicesData, requestsData, trialData] = await Promise.all([
         getParentDevices(),
         getPendingRequests(),
+        getFreeTrialStatus().catch(err => {
+          console.log('[Dashboard] Could not load trial status:', err);
+          return null;
+        }),
       ]);
 
+      console.log('[Dashboard] Trial status received:', JSON.stringify(trialData, null, 2));
+      
       setDevices(devicesData);
       setPendingRequests(requestsData);
+      setTrialStatus(trialData);
+      
+      console.log('[Dashboard] Trial status set in state');
 
       // Get usage sessions for all devices (last 7 days)
       if (devicesData.length > 0) {
@@ -96,13 +109,42 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   ];
 
   const menuItems = [
-    { title: 'Hoạt động', screen: 'Activity', icon: '📊' },
-    { title: 'Thiết bị', screen: 'Devices', icon: '📱' },
-    { title: 'Video', screen: 'Videos', icon: '🎬' },
-    { title: 'Yêu cầu truy cập', screen: 'AccessRequests', icon: '✅' },
-    { title: 'Cài đặt', screen: 'Settings', icon: '⚙️' },
-    { title: 'Tạo tài khoản trẻ em', screen: 'CreateChildAccount', icon: '👶' },
+    { title: 'Hoạt động', screen: 'Activity', icon: '📊', requiresTrial: true },
+    { title: 'Thiết bị', screen: 'Devices', icon: '📱', requiresTrial: true },
+    { title: 'Yêu cầu truy cập', screen: 'AccessRequests', icon: '✅', requiresTrial: true },
+    { title: 'Cài đặt', screen: 'Settings', icon: '⚙️', requiresTrial: false },
   ];
+
+  // Check if user has active access
+  const hasActiveAccess = (): boolean => {
+    console.log('[Dashboard] Checking access - trialStatus:', JSON.stringify(trialStatus, null, 2));
+    const hasAccess = trialStatus?.isActive === true;
+    console.log('[Dashboard] Has active access:', hasAccess);
+    return hasAccess;
+    // TODO: Add subscription check when payment is implemented
+  };
+
+  const handleMenuPress = (item: { title: string; screen: string; requiresTrial: boolean }) => {
+    if (item.requiresTrial && !hasActiveAccess()) {
+      Alert.alert(
+        'Cần nâng cấp',
+        `Bạn cần đăng ký dùng thử hoặc mua gói dịch vụ để sử dụng tính năng "${item.title}".`,
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { 
+            text: 'Dùng thử 7 ngày', 
+            onPress: () => navigation.navigate('Trial')
+          },
+          { 
+            text: 'Nâng cấp ngay', 
+            onPress: () => navigation.navigate('UpgradePackage')
+          }
+        ]
+      );
+      return;
+    }
+    navigation.navigate(item.screen as any);
+  };
 
   // Generate recent activity from real data
   const getRecentActivities = () => {
@@ -163,6 +205,38 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
     return `${diffDays} ngày trước`;
   };
 
+  // Calculate days remaining for trial
+  const calculateDaysRemaining = (): number => {
+    if (!trialStatus?.expiresAt) return 0;
+    const expiresDate = new Date(trialStatus.expiresAt);
+    const now = new Date();
+    const diff = expiresDate.getTime() - now.getTime();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+
+  // Calculate trial progress percentage (0-100)
+  const calculateTrialProgress = (): number => {
+    if (!trialStatus?.startedAt || !trialStatus?.expiresAt) return 0;
+    const startDate = new Date(trialStatus.startedAt);
+    const expireDate = new Date(trialStatus.expiresAt);
+    const now = new Date();
+    
+    const totalDuration = expireDate.getTime() - startDate.getTime();
+    const elapsed = now.getTime() - startDate.getTime();
+    const progress = (elapsed / totalDuration) * 100;
+    
+    return Math.min(100, Math.max(0, progress));
+  };
+
+  const formatExpiryDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('vi-VN', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric'
+    });
+  };
+
   const recentActivities = getRecentActivities();
 
   return (
@@ -195,35 +269,113 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
             </View>
 
             <View style={styles.menuGrid}>
-              {menuItems.map((item, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.menuItem}
-                  onPress={() => navigation.navigate(item.screen as any)}
-                >
-                  <Text style={styles.menuIcon}>{item.icon}</Text>
-                  <Text style={styles.menuTitle}>{item.title}</Text>
-                </TouchableOpacity>
-              ))}
+              {menuItems.map((item, index) => {
+                const isLocked = item.requiresTrial && !hasActiveAccess();
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.menuItem,
+                      isLocked && styles.menuItemDisabled
+                    ]}
+                    onPress={() => handleMenuPress(item)}
+                  >
+                    <View style={styles.menuIconContainer}>
+                      <Text style={styles.menuIcon}>{item.icon}</Text>
+                      {isLocked && <Text style={styles.lockBadge}>🔒</Text>}
+                    </View>
+                    <Text style={[
+                      styles.menuTitle,
+                      isLocked && styles.menuTitleDisabled
+                    ]}>
+                      {item.title}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
-            {showTrialBanner && (
-              <View style={styles.trialBanner}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.trialTitle}>🎁 Đang dùng thử 7 ngày</Text>
-                  <Text style={styles.trialText}>
-                    Nâng cấp để tiếp tục sử dụng đầy đủ tính năng sau thời gian dùng thử.
-                  </Text>
+            {/* Banner for users who haven't registered trial yet or trial expired */}
+            {trialStatus && !trialStatus.isActive && (
+              <View style={styles.noTrialBanner}>
+                <View style={styles.noTrialContent}>
+                  <View style={styles.noTrialHeader}>
+                    <Text style={styles.noTrialIcon}>⚡</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.noTrialTitle}>
+                        {trialStatus.hasTrial ? 'Thời gian dùng thử đã hết' : 'Bắt đầu trải nghiệm'}
+                      </Text>
+                      <Text style={styles.noTrialText}>
+                        {trialStatus.hasTrial 
+                          ? 'Nâng cấp ngay để tiếp tục sử dụng đầy đủ tính năng'
+                          : 'Sử dụng gói dùng thử 7 ngày miễn phí hoặc nâng cấp ngay'
+                        }
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.noTrialButtons}>
+                    {!trialStatus.hasTrial && (
+                      <TouchableOpacity
+                        style={styles.tryFreeButton}
+                        onPress={() => navigation.navigate('Trial')}
+                      >
+                        <Text style={styles.tryFreeButtonText}>🎁 Dùng thử 7 ngày</Text>
+                      </TouchableOpacity>
+                    )}
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.upgradeNowButton,
+                        trialStatus.hasTrial && styles.upgradeNowButtonFull
+                      ]}
+                      onPress={() => navigation.navigate('UpgradePackage')}
+                    >
+                      <Text style={[
+                        styles.upgradeNowButtonText,
+                        trialStatus.hasTrial && styles.upgradeNowButtonTextFull
+                      ]}>
+                        ✨ Nâng cấp ngay
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <View style={styles.trialActions}>
+              </View>
+            )}
+
+            {trialStatus?.isActive && (
+              <View style={styles.trialBanner}>
+                <View style={styles.trialContent}>
+                  <View style={styles.trialHeader}>
+                    <Text style={styles.trialIcon}>🎁</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.trialTitle}>Đang dùng thử miễn phí</Text>
+                      <Text style={styles.trialText}>
+                        Còn {calculateDaysRemaining()} ngày • Hết hạn: {trialStatus.expiresAt ? formatExpiryDate(trialStatus.expiresAt) : 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  {/* Progress Bar */}
+                  <View style={styles.progressBarContainer}>
+                    <View style={styles.progressBarBackground}>
+                      <View 
+                        style={[
+                          styles.progressBarFill,
+                          { width: `${calculateTrialProgress()}%` }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      {(100 - calculateTrialProgress()).toFixed(0)}% thời gian còn lại
+                    </Text>
+                  </View>
+
                   <TouchableOpacity
                     style={styles.trialUpgradeButton}
                     onPress={() => navigation.navigate('UpgradePackage')}
                   >
-                    <Text style={styles.trialUpgradeText}>Nâng cấp</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setShowTrialBanner(false)}>
-                    <Text style={styles.trialDismissText}>Bỏ qua</Text>
+                    <Text style={styles.trialUpgradeText}>✨ Nâng cấp ngay</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -320,15 +472,105 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
   },
+  menuItemDisabled: {
+    backgroundColor: '#f1f5f9',
+    opacity: 0.6,
+  },
+  menuIconContainer: {
+    position: 'relative',
+    marginBottom: 8,
+  },
   menuIcon: {
     fontSize: 32,
-    marginBottom: 8,
+  },
+  lockBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -8,
+    fontSize: 16,
   },
   menuTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
     textAlign: 'center',
+  },
+  menuTitleDisabled: {
+    color: '#94a3b8',
+  },
+  noTrialBanner: {
+    backgroundColor: '#fef3c7',
+    borderLeftWidth: 4,
+    borderLeftColor: '#f59e0b',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: '#f59e0b',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  noTrialContent: {
+    gap: 12,
+  },
+  noTrialHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  noTrialIcon: {
+    fontSize: 32,
+  },
+  noTrialTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#92400e',
+    marginBottom: 4,
+  },
+  noTrialText: {
+    fontSize: 13,
+    color: '#d97706',
+    lineHeight: 18,
+  },
+  noTrialButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  tryFreeButton: {
+    flex: 1,
+    backgroundColor: '#f59e0b',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  tryFreeButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  upgradeNowButton: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+  },
+  upgradeNowButtonFull: {
+    backgroundColor: '#f59e0b',
+    borderColor: '#f59e0b',
+  },
+  upgradeNowButtonText: {
+    color: '#f59e0b',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  upgradeNowButtonTextFull: {
+    color: '#fff',
   },
   recentActivity: {
     marginBottom: 24,
@@ -369,48 +611,70 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
   },
   trialBanner: {
-    backgroundColor: '#e8f4ff',
+    backgroundColor: '#dcfce7',
     borderLeftWidth: 4,
-    borderLeftColor: COLORS.primary,
+    borderLeftColor: '#22c55e',
     padding: 16,
     borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
     marginBottom: 16,
+    shadowColor: '#22c55e',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  trialContent: {
+    gap: 12,
+  },
+  trialHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  trialIcon: {
+    fontSize: 32,
   },
   trialTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: COLORS.text,
+    color: '#15803d',
     marginBottom: 4,
   },
   trialText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
+    fontSize: 13,
+    color: '#16a34a',
     lineHeight: 18,
   },
-  trialActions: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    gap: 8,
+  progressBarContainer: {
+    gap: 6,
+  },
+  progressBarBackground: {
+    height: 8,
+    backgroundColor: '#bbf7d0',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#22c55e',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 11,
+    color: '#16a34a',
+    fontWeight: '600',
   },
   trialUpgradeButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    backgroundColor: '#22c55e',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
   trialUpgradeText: {
     color: '#fff',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: 'bold',
-  },
-  trialDismissText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    textDecorationLine: 'underline',
   },
   emptyActivity: {
     backgroundColor: '#fff',
