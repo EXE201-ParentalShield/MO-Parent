@@ -3,31 +3,54 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Ac
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../utils/constants';
-import { getFreeTrialStatus, FreeTrialStatus } from '../api/freeTrial';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../utils/constants';
 
 const SettingsScreen = () => {
   const { logout, user } = useAuth();
   const [notifications, setNotifications] = React.useState(true);
   const [safeMode, setSafeMode] = React.useState(true);
-  const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
-  const [loadingTrial, setLoadingTrial] = useState(false);
+  const [loadingAccount, setLoadingAccount] = useState(false);
+  const [hasSubscription, setHasSubscription] = useState<boolean | null>(null);
+  const [planName, setPlanName] = useState<string | undefined>(undefined);
+  const [isActive, setIsActive] = useState<boolean>(false);
+  const [expiresAt, setExpiresAt] = useState<string | undefined>(undefined);
 
-  const loadTrialStatus = async () => {
+  const loadAccountStatus = async () => {
     try {
-      setLoadingTrial(true);
-      const status = await getFreeTrialStatus();
-      console.log('[Settings] Trial status loaded:', JSON.stringify(status, null, 2));
-      setTrialStatus(status);
+      setLoadingAccount(true);
+      const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = settingsStr ? JSON.parse(settingsStr) : {};
+      const currentUserId =
+        Number(user?.userId) ||
+        Number((user as any)?.id) ||
+        Number((user as any)?.userID) ||
+        0;
+      const subs = settings?.subscriptions || {};
+      const sub = subs?.[currentUserId];
+      const hasSub = !!sub;
+      setHasSubscription(hasSub);
+      setPlanName(sub?.planName);
+      setExpiresAt(sub?.expiresAt);
+      if (sub?.expiresAt) {
+        const active = new Date(sub.expiresAt).getTime() > Date.now();
+        setIsActive(active);
+      } else {
+        setIsActive(false);
+      }
     } catch (error) {
-      console.error('[Settings] Error loading trial status:', error);
+      setHasSubscription(null);
+      setPlanName(undefined);
+      setExpiresAt(undefined);
+      setIsActive(false);
     } finally {
-      setLoadingTrial(false);
+      setLoadingAccount(false);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      loadTrialStatus();
+      loadAccountStatus();
     }, [])
   );
 
@@ -43,21 +66,13 @@ const SettingsScreen = () => {
     });
   };
 
-  const calculateDaysRemaining = (): number => {
-    if (!trialStatus?.expiresAt) return 0;
-    const expiresDate = new Date(trialStatus.expiresAt);
-    const now = new Date();
-    const diff = expiresDate.getTime() - now.getTime();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
-  };
-
-  const handleRefreshTrial = () => {
+  const handleRefreshAccount = () => {
     Alert.alert(
       'Làm mới trạng thái',
-      'Kiểm tra lại trạng thái dùng thử của bạn?',
+      'Kiểm tra lại trạng thái tài khoản của bạn?',
       [
         { text: 'Hủy', style: 'cancel' },
-        { text: 'Kiểm tra', onPress: loadTrialStatus }
+        { text: 'Kiểm tra', onPress: loadAccountStatus }
       ]
     );
   };
@@ -100,46 +115,38 @@ const SettingsScreen = () => {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trạng thái dùng thử</Text>
+          <Text style={styles.sectionTitle}>Trạng thái tài khoản</Text>
           <View style={styles.card}>
-            {loadingTrial ? (
+            {loadingAccount ? (
               <ActivityIndicator size="small" color={COLORS.primary} />
-            ) : trialStatus ? (
+            ) : hasSubscription !== null ? (
               <>
                 <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Đã đăng ký:</Text>
-                  <Text style={[styles.infoValue, { color: trialStatus.hasTrial ? COLORS.success : COLORS.danger }]}>
-                    {trialStatus.hasTrial ? '✅ Có' : '❌ Chưa'}
+                  <Text style={styles.infoLabel}>Đã đăng ký gói:</Text>
+                  <Text style={[styles.infoValue, { color: hasSubscription ? COLORS.success : COLORS.danger }]}>
+                    {hasSubscription ? '✅ Có' : '❌ Chưa'}
                   </Text>
                 </View>
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>Đang hoạt động:</Text>
-                  <Text style={[styles.infoValue, { color: trialStatus.isActive ? COLORS.success : COLORS.danger }]}>
-                    {trialStatus.isActive ? '✅ Có' : '❌ Không'}
-                  </Text>
-                </View>
-                {trialStatus.hasTrial && (
+                {hasSubscription && (
                   <>
                     <View style={styles.infoRow}>
-                      <Text style={styles.infoLabel}>Bắt đầu:</Text>
-                      <Text style={styles.infoValue}>{formatDate(trialStatus.startedAt)}</Text>
+                      <Text style={styles.infoLabel}>Tên gói:</Text>
+                      <Text style={styles.infoValue}>{planName || 'N/A'}</Text>
                     </View>
                     <View style={styles.infoRow}>
                       <Text style={styles.infoLabel}>Hết hạn:</Text>
-                      <Text style={styles.infoValue}>{formatDate(trialStatus.expiresAt)}</Text>
+                      <Text style={styles.infoValue}>{formatDate(expiresAt)}</Text>
                     </View>
-                    {trialStatus.isActive && (
-                      <View style={styles.infoRow}>
-                        <Text style={styles.infoLabel}>Còn lại:</Text>
-                        <Text style={[styles.infoValue, { fontWeight: 'bold', color: COLORS.primary }]}>
-                          {calculateDaysRemaining()} ngày
-                        </Text>
-                      </View>
-                    )}
+                    <View style={styles.infoRow}>
+                      <Text style={styles.infoLabel}>Trạng thái:</Text>
+                      <Text style={[styles.infoValue, { color: isActive ? COLORS.success : COLORS.danger }]}>
+                        {isActive ? 'Hoạt động' : 'Hết hạn'}
+                      </Text>
+                    </View>
                   </>
                 )}
-                <TouchableOpacity style={styles.refreshButton} onPress={handleRefreshTrial}>
-                  <Text style={styles.refreshButtonText}>🔄 Làm mới trạng thái</Text>
+                <TouchableOpacity style={styles.refreshButton} onPress={handleRefreshAccount}>
+                  <Text style={styles.refreshButtonText}>🔄 Làm mới</Text>
                 </TouchableOpacity>
               </>
             ) : (

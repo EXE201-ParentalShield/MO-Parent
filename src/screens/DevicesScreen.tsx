@@ -15,6 +15,9 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
 import { getParentDevices, lockDevice, unlockDevice, Device } from '../api/devices';
 import { getFreeTrialStatus, FreeTrialStatus } from '../api/freeTrial';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../utils/constants';
+import { storage } from '../utils/storage';
 
 type DevicesScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Devices'>;
 
@@ -28,6 +31,73 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lockingDeviceId, setLockingDeviceId] = useState<number | null>(null);
   const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
+  const [subscriptionActive, setSubscriptionActive] = useState(false);
+  const expiryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expiryNotifiedRef = React.useRef(false);
+
+  const clearExpiryWatcher = () => {
+    if (expiryTimerRef.current) {
+      clearTimeout(expiryTimerRef.current);
+      expiryTimerRef.current = null;
+    }
+  };
+
+  const notifyExpiry = () => {
+    if (expiryNotifiedRef.current) return;
+    expiryNotifiedRef.current = true;
+    Alert.alert(
+      'Gói đã hết hạn',
+      'Gói của bạn đã hết hạn. Các tính năng đã được khóa. Vui lòng nâng cấp để tiếp tục.',
+      [
+        { text: 'Đóng', style: 'cancel' },
+        { text: 'Nâng cấp ngay', onPress: () => navigation.navigate('UpgradePackage') },
+      ]
+    );
+  };
+
+  const markSubscriptionInactive = async () => {
+    try {
+      const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = settingsStr ? JSON.parse(settingsStr) : {};
+      const currentUser = await storage.getUserData();
+      const currentUserId =
+        Number(currentUser?.id) ||
+        Number(currentUser?.userId) ||
+        Number(currentUser?.userID) ||
+        Number(currentUser?.Id) ||
+        Number(currentUser?.UserId) ||
+        0;
+      const subs = settings?.subscriptions || {};
+      if (subs?.[currentUserId]) {
+        const nextSubs = {
+          ...subs,
+          [currentUserId]: {
+            ...subs[currentUserId],
+            isActive: false,
+          },
+        };
+        const next = { ...settings, subscriptions: nextSubs };
+        await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(next));
+      }
+    } catch {}
+  };
+
+  const setupExpiryWatcher = (expiresAt?: string) => {
+    clearExpiryWatcher();
+    if (!expiresAt) return;
+    const ms = new Date(expiresAt).getTime() - Date.now();
+    if (ms <= 0) {
+      setSubscriptionActive(false);
+      markSubscriptionInactive();
+      notifyExpiry();
+      return;
+    }
+    expiryTimerRef.current = setTimeout(() => {
+      setSubscriptionActive(false);
+      markSubscriptionInactive();
+      notifyExpiry();
+    }, ms + 500);
+  };
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -42,6 +112,34 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
       console.log('[DevicesScreen] Fetched devices count:', devicesData.length);
       setDevices(devicesData);
       setTrialStatus(trialData);
+      try {
+        const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+        const settings = settingsStr ? JSON.parse(settingsStr) : {};
+        const currentUser = await storage.getUserData();
+        const currentUserId =
+          Number(currentUser?.id) ||
+          Number(currentUser?.userId) ||
+          Number(currentUser?.userID) ||
+          Number(currentUser?.Id) ||
+          Number(currentUser?.UserId) ||
+          0;
+        const subs = settings?.subscriptions || {};
+        const sub = subs?.[currentUserId];
+        if (sub?.expiresAt) {
+          const now = new Date();
+          const exp = new Date(sub.expiresAt);
+          const active = exp.getTime() > now.getTime();
+          setSubscriptionActive(active);
+          if (active) setupExpiryWatcher(sub.expiresAt);
+          else clearExpiryWatcher();
+        } else {
+          setSubscriptionActive(false);
+          clearExpiryWatcher();
+        }
+      } catch {
+        setSubscriptionActive(false);
+        clearExpiryWatcher();
+      }
     } catch (error: any) {
       console.error('[DevicesScreen] Error fetching devices:', error);
       Alert.alert('Lỗi', error.message || 'Không thể tải danh sách thiết bị');
@@ -65,14 +163,87 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
     fetchDevices();
   };
 
+  React.useEffect(() => {
+    return () => {
+      clearExpiryWatcher();
+    };
+  }, []);
+
   // Check if user has active trial or subscription
   const hasActiveAccess = (): boolean => {
     console.log('[DevicesScreen] Checking access - trialStatus:', JSON.stringify(trialStatus, null, 2));
-    const hasAccess = trialStatus?.isActive === true;
+    const hasAccess = (trialStatus?.isActive === true) || subscriptionActive;
     console.log('[DevicesScreen] Has active access:', hasAccess);
     return hasAccess;
     // TODO: Add subscription check when payment is implemented
     // return trialStatus?.isActive === true || hasActiveSubscription;
+  };
+
+  const getAllowedDevicesByPlan = (planName?: string): number => {
+    if (!planName) return 0;
+    if (planName.includes('Tháng')) return 2;
+    if (planName.includes('Tuần')) return 1;
+    if (planName.includes('Ngày')) return 1;
+    return 0;
+  };
+
+  const canAddAnotherDevice = async (): Promise<boolean> => {
+    try {
+      const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = settingsStr ? JSON.parse(settingsStr) : {};
+      const currentUser = await storage.getUserData();
+      const currentUserId =
+        Number(currentUser?.id) ||
+        Number(currentUser?.userId) ||
+        Number(currentUser?.userID) ||
+        Number(currentUser?.Id) ||
+        Number(currentUser?.UserId) ||
+        0;
+      const subs = settings?.subscriptions || {};
+      const sub = subs?.[currentUserId];
+      const now = new Date();
+      const exp = sub?.expiresAt ? new Date(sub.expiresAt) : null;
+      const subActive = !!exp && exp.getTime() > now.getTime();
+      const currentCount = devices.length;
+
+      if (subActive) {
+        const allowed = getAllowedDevicesByPlan(sub?.planName);
+        if (allowed <= 0 || currentCount >= allowed) {
+          Alert.alert(
+            'Cần nâng cấp',
+            `Gói hiện tại cho phép tối đa ${allowed} thiết bị. Vui lòng nâng cấp để thêm thiết bị.`,
+            [
+              { text: 'Hủy', style: 'cancel' },
+              { text: 'Nâng cấp gói', onPress: () => navigation.navigate('UpgradePackage') },
+            ]
+          );
+          return false;
+        }
+        return true;
+      }
+
+      if (trialStatus?.isActive) {
+        const allowedTrial = 1;
+        if (currentCount >= allowedTrial) {
+          Alert.alert(
+            'Giới hạn dùng thử',
+            'Dùng thử cho phép tối đa 1 thiết bị. Vui lòng nâng cấp gói để thêm thiết bị.',
+            [
+              { text: 'Hủy', style: 'cancel' },
+              { text: 'Nâng cấp gói', onPress: () => navigation.navigate('UpgradePackage') },
+            ]
+          );
+          return false;
+        }
+        return true;
+      }
+
+      showUpgradeAlert();
+      return false;
+    } catch {
+      showUpgradeAlert();
+      return false;
+    }
   };
 
   const showUpgradeAlert = () => {
@@ -93,11 +264,13 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const handleAddDevice = () => {
+  const handleAddDevice = async () => {
     if (!hasActiveAccess()) {
       showUpgradeAlert();
       return;
     }
+    const ok = await canAddAnotherDevice();
+    if (!ok) return;
     navigation.navigate('AddDevice');
   };
 

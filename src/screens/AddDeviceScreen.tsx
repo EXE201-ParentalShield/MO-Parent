@@ -18,6 +18,7 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
 import { createChildAccount } from '../api/children';
 
+
 type AddDeviceScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddDevice'>;
 
 interface Props {

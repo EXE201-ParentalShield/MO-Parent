@@ -17,6 +17,9 @@ import { getParentDevices, Device } from '../api/devices';
 import { getPendingRequests, AccessRequest } from '../api/requests';
 import { getUsageSessions, UsageSession } from '../api/usageSessions';
 import { getFreeTrialStatus, FreeTrialStatus } from '../api/freeTrial';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../utils/constants';
+import { storage } from '../utils/storage';
 
 type DashboardScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
@@ -29,6 +32,73 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState<{ isActive: boolean; planName?: string; startedAt?: string; expiresAt?: string } | null>(null);
+  const expiryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const expiryNotifiedRef = React.useRef(false);
+
+  const clearExpiryWatcher = () => {
+    if (expiryTimerRef.current) {
+      clearTimeout(expiryTimerRef.current);
+      expiryTimerRef.current = null;
+    }
+  };
+
+  const notifyExpiry = () => {
+    if (expiryNotifiedRef.current) return;
+    expiryNotifiedRef.current = true;
+    Alert.alert(
+      'Gói đã hết hạn',
+      'Gói của bạn đã hết hạn. Các tính năng đã được khóa. Vui lòng nâng cấp để tiếp tục.',
+      [
+        { text: 'Đóng', style: 'cancel' },
+        { text: 'Nâng cấp ngay', onPress: () => navigation.navigate('UpgradePackage') },
+      ]
+    );
+  };
+
+  const markSubscriptionInactive = async () => {
+    try {
+      const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = settingsStr ? JSON.parse(settingsStr) : {};
+      const currentUser = await storage.getUserData();
+      const currentUserId =
+        Number(currentUser?.id) ||
+        Number(currentUser?.userId) ||
+        Number(currentUser?.userID) ||
+        Number(currentUser?.Id) ||
+        Number(currentUser?.UserId) ||
+        0;
+      const subs = settings?.subscriptions || {};
+      if (subs?.[currentUserId]) {
+        const nextSubs = {
+          ...subs,
+          [currentUserId]: {
+            ...subs[currentUserId],
+            isActive: false,
+          },
+        };
+        const next = { ...settings, subscriptions: nextSubs };
+        await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(next));
+      }
+    } catch {}
+  };
+
+  const setupExpiryWatcher = (expiresAt?: string, sub?: any) => {
+    clearExpiryWatcher();
+    if (!expiresAt) return;
+    const ms = new Date(expiresAt).getTime() - Date.now();
+    if (ms <= 0) {
+      setSubscriptionStatus(sub ? { ...sub, isActive: false } : null);
+      markSubscriptionInactive();
+      notifyExpiry();
+      return;
+    }
+    expiryTimerRef.current = setTimeout(() => {
+      setSubscriptionStatus(sub ? { ...sub, isActive: false } : null);
+      markSubscriptionInactive();
+      notifyExpiry();
+    }, ms + 500);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -57,6 +127,36 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
       setDevices(devicesData);
       setPendingRequests(requestsData);
       setTrialStatus(trialData);
+      
+      try {
+        const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+        const settings = settingsStr ? JSON.parse(settingsStr) : {};
+        const currentUser = await storage.getUserData();
+        const currentUserId =
+          Number(currentUser?.id) ||
+          Number(currentUser?.userId) ||
+          Number(currentUser?.userID) ||
+          Number(currentUser?.Id) ||
+          Number(currentUser?.UserId) ||
+          0;
+        const map = settings?.subscriptions || null;
+        const sub = map?.[currentUserId] || null;
+        if (sub?.expiresAt) {
+          const now = new Date();
+          const exp = new Date(sub.expiresAt);
+          const active = exp.getTime() > now.getTime();
+          const nextSub = { ...sub, isActive: active };
+          setSubscriptionStatus(nextSub);
+          if (active) setupExpiryWatcher(sub.expiresAt, nextSub);
+          else clearExpiryWatcher();
+        } else {
+          setSubscriptionStatus(null);
+          clearExpiryWatcher();
+        }
+      } catch {
+        setSubscriptionStatus(null);
+        clearExpiryWatcher();
+      }
       
       console.log('[Dashboard] Trial status set in state');
 
@@ -118,7 +218,9 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   // Check if user has active access
   const hasActiveAccess = (): boolean => {
     console.log('[Dashboard] Checking access - trialStatus:', JSON.stringify(trialStatus, null, 2));
-    const hasAccess = trialStatus?.isActive === true;
+    const trialActive = trialStatus?.isActive === true;
+    const subActive = subscriptionStatus?.isActive === true;
+    const hasAccess = trialActive || subActive;
     console.log('[Dashboard] Has active access:', hasAccess);
     return hasAccess;
     // TODO: Add subscription check when payment is implemented
@@ -214,6 +316,14 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   };
 
+  const calculateSubscriptionDaysRemaining = (): number => {
+    if (!subscriptionStatus?.expiresAt) return 0;
+    const expiresDate = new Date(subscriptionStatus.expiresAt);
+    const now = new Date();
+    const diff = expiresDate.getTime() - now.getTime();
+    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+
   // Calculate trial progress percentage (0-100)
   const calculateTrialProgress = (): number => {
     if (!trialStatus?.startedAt || !trialStatus?.expiresAt) return 0;
@@ -238,6 +348,12 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   };
 
   const recentActivities = getRecentActivities();
+
+  useEffect(() => {
+    return () => {
+      clearExpiryWatcher();
+    };
+  }, []);
 
   return (
     <ScrollView 
@@ -295,8 +411,37 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
               })}
             </View>
 
+            {subscriptionStatus?.isActive && (
+              <View style={styles.trialBanner}>
+                <View style={styles.trialContent}>
+                  <View style={styles.trialHeader}>
+                    <Text style={styles.trialIcon}>💎</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.trialTitle}>Gói đang hoạt động</Text>
+                      <Text style={styles.trialText}>
+                        Còn {calculateSubscriptionDaysRemaining()} ngày • Hết hạn: {subscriptionStatus.expiresAt ? formatExpiryDate(subscriptionStatus.expiresAt) : 'N/A'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.progressBarContainer}>
+                    <View style={styles.progressBarBackground}>
+                      <View 
+                        style={[
+                          styles.progressBarFill,
+                          { width: '100%' }
+                        ]} 
+                      />
+                    </View>
+                    <Text style={styles.progressText}>
+                      Đang sử dụng gói {subscriptionStatus.planName || ''}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
             {/* Banner for users who haven't registered trial yet or trial expired */}
-            {trialStatus && !trialStatus.isActive && (
+            {!subscriptionStatus?.isActive && trialStatus && !trialStatus.isActive && (
               <View style={styles.noTrialBanner}>
                 <View style={styles.noTrialContent}>
                   <View style={styles.noTrialHeader}>
@@ -343,7 +488,7 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
               </View>
             )}
 
-            {trialStatus?.isActive && (
+            {!subscriptionStatus?.isActive && trialStatus?.isActive && (
               <View style={styles.trialBanner}>
                 <View style={styles.trialContent}>
                   <View style={styles.trialHeader}>

@@ -15,6 +15,8 @@ import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
 import { storage } from '../utils/storage';
 import * as ExpoLinking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../utils/constants';
 
 type UpgradePackageScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'UpgradePackage'>;
@@ -27,6 +29,7 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
   const appStateRef = React.useRef(AppState.currentState);
   const pendingPaymentIdRef = React.useRef<number | null>(null);
   const pendingTokenRef = React.useRef<string | null>(null);
+  const hasNavigatedRef = React.useRef(false); // guard against double navigation
 
   const API_BASE_URL = 'https://be-ikk8.onrender.com';
 
@@ -40,10 +43,56 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
     setIsWaitingPayment(false);
   };
 
+  const persistSubscription = async (startedAt?: string) => {
+    try {
+      const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+      const settings = settingsStr ? JSON.parse(settingsStr) : {};
+      const pendingMap = settings?.pendingUpgrades || {};
+      const user = await storage.getUserData();
+      const userId =
+        Number(user?.id) ||
+        Number(user?.userId) ||
+        Number(user?.userID) ||
+        Number(user?.Id) ||
+        Number(user?.UserId) ||
+        0;
+      const pending = pendingMap?.[userId];
+      if (!pending) return;
+      const start = startedAt ? new Date(startedAt) : new Date();
+      const expires = new Date(start);
+      expires.setDate(expires.getDate() + Number(pending.durationDays || 0));
+      const currentSubs = settings?.subscriptions || {};
+      const nextSubs = {
+        ...currentSubs,
+        [userId]: {
+          isActive: true,
+          planName: pending.planName,
+          startedAt: start.toISOString(),
+          expiresAt: expires.toISOString(),
+          userId,
+        },
+      };
+      const nextPending = { ...(settings?.pendingUpgrades || {}) };
+      delete nextPending[userId];
+      const next = {
+        ...settings,
+        subscriptions: nextSubs,
+        pendingUpgrades: nextPending,
+      };
+      await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(next));
+    } catch {}
+  };
+
   const handlePaymentResult = (data: any, success: boolean) => {
+    // Guard against duplicate navigation from polling + deep link race
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+
     clearPaymentState();
 
     if (success) {
+      const paidAt = data?.data?.paidAt;
+      persistSubscription(paidAt);
       navigation.navigate('PaymentResult', {
         success: true,
         packageName: data?.data?.description || 'Gói dịch vụ',
@@ -98,7 +147,15 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
         })
       );
 
+      // Guard against duplicate navigation
+      if (hasNavigatedRef.current) return;
+      hasNavigatedRef.current = true;
+
       clearPaymentState();
+
+      if (params.status === 'Success') {
+        persistSubscription(params.paidAt);
+      }
 
       navigation.navigate('PaymentResult', {
         success: params.status === 'Success',
@@ -154,11 +211,11 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
     let attempts = 0;
     const maxAttempts = 24; // 24 x 5s = 2 phút
 
-    pollingRef.current = setInterval(async () => {
+    const intervalId = setInterval(async () => {
       attempts++;
 
       if (attempts > maxAttempts) {
-        clearInterval(pollingRef.current!);
+        clearInterval(intervalId);
         pollingRef.current = null;
         pendingPaymentIdRef.current = null;
         pendingTokenRef.current = null;
@@ -170,8 +227,14 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
         return;
       }
 
-      await checkPaymentStatus(paymentId, token);
+      const result = await checkPaymentStatus(paymentId, token);
+      if (result === 'Success' || result === 'Failed') {
+        clearInterval(intervalId);
+        pollingRef.current = null;
+      }
     }, 5000);
+
+    pollingRef.current = intervalId;
   };
 
   const packages = [
@@ -226,6 +289,7 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
     try {
       setLoadingId(pkg.id);
 
+      // ✅ FIX: Resolve token & userId FIRST before using them
       const token = await storage.getToken();
       const user = await storage.getUserData();
       const userId =
@@ -240,6 +304,29 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
         throw new Error('Không tìm thấy userId. Vui lòng đăng nhập lại.');
       if (!token)
         throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
+
+      // ✅ Now userId is defined — safe to use here
+      try {
+        const settingsStr = await AsyncStorage.getItem(STORAGE_KEYS.SETTINGS);
+        const settings = settingsStr ? JSON.parse(settingsStr) : {};
+        const durationDays = pkg.id === 1 ? 1 : pkg.id === 2 ? 7 : 30;
+        const pendingUpgrades = {
+          ...(settings?.pendingUpgrades || {}),
+          [userId]: {
+            planName: pkg.name,
+            durationDays,
+            userId,
+          },
+        };
+        const next = {
+          ...settings,
+          pendingUpgrades,
+        };
+        await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(next));
+      } catch {}
+
+      // Reset navigation guard for new payment attempt
+      hasNavigatedRef.current = false;
 
       const amount = Number(String(pkg.price).replace(/[^\d]/g, '')) || 0;
       const orderId = `ORDER-${Date.now()}`;
@@ -312,11 +399,7 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
             ⏳ Đang chờ xác nhận thanh toán... Vui lòng quay lại app sau khi
             thanh toán xong.
           </Text>
-          <TouchableOpacity
-            onPress={() => {
-              clearPaymentState();
-            }}
-          >
+          <TouchableOpacity onPress={() => clearPaymentState()}>
             <Text style={styles.waitingCancel}>Hủy</Text>
           </TouchableOpacity>
         </View>
