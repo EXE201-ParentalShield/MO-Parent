@@ -7,16 +7,17 @@ import { useAuth } from '../contexts/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import TrialScreen from '../screens/TrialScreen';
-import DashboardScreen from '../screens/DashboardScreen';
-import ActivityScreen from '../screens/ActivityScreen';
+import DashboardScreen from '../screens/DashboardStoryScreen';
+import ActivityScreen from '../screens/ActivityStoryScreen';
 import DevicesScreen from '../screens/DevicesScreen';
-import AccessRequestsScreen from '../screens/AccessRequestsScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+import AccessRequestsScreen from '../screens/AccessRequestsStoryScreen';
+import SettingsScreen from '../screens/SettingsStoryScreen';
 import CreateChildAccountScreen from '../screens/CreateChildAccountScreen';
 import AddDeviceScreen from '../screens/AddDeviceScreen';
 import UpgradePackageScreen from '../screens/UpgradePackageScreen';
 import PaymentResultScreen from '../screens/PaymentResultScreen';
 import FeatureIntroductionScreen from '../screens/FeatureIntroductionScreen';
+import VNPayWebViewScreen from '../screens/VNPayWebViewScreen';
 
 export type RootStackParamList = {
   FeatureIntroduction: undefined;
@@ -31,6 +32,12 @@ export type RootStackParamList = {
   CreateChildAccount: undefined;
   AddDevice: undefined;
   UpgradePackage: undefined;
+  VNPayWebView: {
+    paymentUrl: string;
+    paymentId: number;
+    token: string;
+    packageName?: string;
+  };
   PaymentResult: {
     success: boolean;
     packageName?: string;
@@ -56,11 +63,15 @@ export const AppNavigator = () => {
         initialRouteName={isAuthenticated ? 'Dashboard' : 'Login'}
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#3b82f6',
+            backgroundColor: '#3B82F6',
           },
+          headerShadowVisible: false,
           headerTintColor: '#fff',
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: '700',
+          },
+          contentStyle: {
+            backgroundColor: '#F9FAFB',
           },
         }}
       >
@@ -133,6 +144,11 @@ export const AppNavigator = () => {
               name="UpgradePackage" 
               component={UpgradePackageScreen}
               options={{ title: 'Nâng cấp gói' }}
+            />
+            <Stack.Screen
+              name="VNPayWebView"
+              component={VNPayWebViewScreen}
+              options={{ title: 'Thanh toán VNPay', headerBackTitle: 'Hủy' }}
             />
             <Stack.Screen 
               name="PaymentResult" 

@@ -11,7 +11,6 @@ export interface RegisterData {
   confirmPassword: string;
   fullName: string;
   phoneNumber: string;
-  role: 'Parent';
 }
 
 export interface LoginResponse {
@@ -43,7 +42,6 @@ export const register = async (
       fullName,
       email,
       phoneNumber: phoneNumber || '',
-      role: 'Parent',
     });
     
     if (response.data.success && response.data.token) {

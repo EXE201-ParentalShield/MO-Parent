@@ -42,7 +42,17 @@ export const createChildAccount = async (data: CreateChildAccountData): Promise<
     }
     
     const user = JSON.parse(userData);
-    const parentId = user.userId;
+    const parentId =
+      Number(user?.userId) ||
+      Number(user?.id) ||
+      Number(user?.userID) ||
+      Number(user?.UserId) ||
+      Number(user?.Id) ||
+      0;
+
+    if (!parentId) {
+      throw new Error('Không xác định được parentId. Vui lòng đăng nhập lại.');
+    }
     
     const requestBody = {
       parentId: parentId,

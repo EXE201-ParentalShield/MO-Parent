@@ -1,21 +1,21 @@
 // Shield Family Parent App - Constants
 export const COLORS = {
-  primary: '#4C9AFF',
-  primaryDark: '#3b7dd6',
-  primaryLight: '#7db5ff',
-  secondary: '#8b5cf6',
+  primary: '#3B82F6',
+  primaryDark: '#1D4ED8',
+  primaryLight: '#DBEAFE',
+  secondary: '#0F172A',
   success: '#10b981',
   danger: '#ef4444',
   warning: '#f59e0b',
-  background: '#f0f7ff',
-  backgroundGradientStart: '#4C9AFF',
-  backgroundGradientEnd: '#E8F4FF',
+  background: '#F9FAFB',
+  backgroundGradientStart: '#EFF6FF',
+  backgroundGradientEnd: '#F0FDF4',
   card: '#ffffff',
-  text: '#1e293b',
+  text: '#111827',
   textSecondary: '#64748b',
-  border: '#e2e8f0',
-  shadow: 'rgba(76, 154, 255, 0.2)',
-  glow: 'rgba(76, 154, 255, 0.3)',
+  border: '#E5E7EB',
+  shadow: 'rgba(15, 23, 42, 0.08)',
+  glow: 'rgba(59, 130, 246, 0.18)',
 };
 
 export const SCREEN_NAMES = {
@@ -41,4 +41,5 @@ export const STORAGE_KEYS = {
   TOKEN: '@shield_parent_token',
   USER_DATA: '@shield_parent_user',
   SETTINGS: '@shield_parent_settings',
+  ACTIVITY_BADGE_LAST_SEEN_AT: '@shield_parent_activity_badge_last_seen_at',
 };
