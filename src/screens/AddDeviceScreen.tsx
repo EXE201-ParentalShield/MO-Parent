@@ -40,6 +40,26 @@ const AddDeviceScreen: React.FC<Props> = ({ navigation }) => {
     childPassword: '',
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  const showUpgradePrompt = (message: string) => {
+    Alert.alert('Đã đạt giới hạn thiết bị', message, [
+      { text: 'Để sau', style: 'cancel' },
+      {
+        text: 'Nâng cấp gói',
+        onPress: () => navigation.navigate('UpgradePackage'),
+      },
+    ]);
+  };
+
+  const isUpgradeRequiredError = (message: string) => {
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('giới hạn') ||
+      normalized.includes('nâng cấp') ||
+      normalized.includes('gói dịch vụ') ||
+      normalized.includes('trial')
+    );
+  };
   const validateField = (field: keyof typeof errors, value: string) => {
     let error = '';
     
@@ -132,10 +152,18 @@ const AddDeviceScreen: React.FC<Props> = ({ navigation }) => {
         );
       } else {
         const errorMessage = response.message || 'Không thể thêm thiết bị';
+        if (isUpgradeRequiredError(errorMessage)) {
+          showUpgradePrompt(errorMessage);
+          return;
+        }
         setErrors(prev => ({ ...prev, childPassword: errorMessage }));
       }
     } catch (error: any) {
       const errorMessage = error.message || 'Không thể thêm thiết bị. Vui lòng thử lại.';
+      if (isUpgradeRequiredError(errorMessage)) {
+        showUpgradePrompt(errorMessage);
+        return;
+      }
       setErrors(prev => ({ ...prev, childPassword: errorMessage }));
     } finally {
       setIsLoading(false);

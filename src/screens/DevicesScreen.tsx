@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -13,7 +13,15 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
-import { getParentDevices, lockDevice, unlockDevice, Device } from '../api/devices';
+import {
+  getParentDevices,
+  lockDevice,
+  unlockDevice,
+  Device,
+  getDeviceEntitlementStatus,
+  resolveDowngradeSelection,
+  DeviceEntitlementStatus,
+} from '../api/devices';
 import { getFreeTrialStatus, FreeTrialStatus } from '../api/freeTrial';
 
 type DevicesScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Devices'>;
@@ -28,20 +36,73 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lockingDeviceId, setLockingDeviceId] = useState<number | null>(null);
   const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
+  const [entitlementStatus, setEntitlementStatus] = useState<DeviceEntitlementStatus | null>(null);
+  const isShowingSelectionPromptRef = useRef(false);
+
+  const showDowngradeSelectionPrompt = useCallback((status: DeviceEntitlementStatus) => {
+    if (isShowingSelectionPromptRef.current) {
+      return;
+    }
+
+    if (!status.requiresDeviceSelection || status.selectableDevices.length === 0) {
+      return;
+    }
+
+    isShowingSelectionPromptRef.current = true;
+
+    const buttons = [
+      ...status.selectableDevices.map((item) => ({
+        text: `${item.childName} (${item.deviceName})`,
+        onPress: async () => {
+          try {
+            await resolveDowngradeSelection(item.deviceId);
+            Alert.alert('Đã cập nhật', 'Thiết bị giữ lại đã được lưu. Các thiết bị còn lại đã bị vô hiệu hóa.');
+            await fetchDevices();
+          } catch (error: any) {
+            Alert.alert('Lỗi', error.message || 'Không thể lưu lựa chọn thiết bị');
+          } finally {
+            isShowingSelectionPromptRef.current = false;
+          }
+        },
+      })),
+      {
+        text: 'Để sau',
+        style: 'cancel' as const,
+        onPress: () => {
+          isShowingSelectionPromptRef.current = false;
+        },
+      },
+    ];
+
+    Alert.alert(
+      'Chọn thiết bị giữ lại',
+      status.message || 'Gói hiện tại chỉ cho phép 1 thiết bị. Hãy chọn thiết bị được phép tiếp tục sử dụng.',
+      buttons
+    );
+  }, []);
 
   const fetchDevices = useCallback(async () => {
     try {
       console.log('[DevicesScreen] Fetching devices...');
-      const [devicesData, trialData] = await Promise.all([
+      const [devicesData, trialData, currentEntitlement] = await Promise.all([
         getParentDevices(),
         getFreeTrialStatus().catch(err => {
           console.log('[DevicesScreen] Could not load trial status:', err);
           return null;
-        })
+        }),
+        getDeviceEntitlementStatus().catch(err => {
+          console.log('[DevicesScreen] Could not load entitlement status:', err);
+          return null;
+        }),
       ]);
       console.log('[DevicesScreen] Fetched devices count:', devicesData.length);
       setDevices(devicesData);
       setTrialStatus(trialData);
+      setEntitlementStatus(currentEntitlement);
+
+      if (currentEntitlement?.requiresDeviceSelection) {
+        showDowngradeSelectionPrompt(currentEntitlement);
+      }
     } catch (error: any) {
       console.error('[DevicesScreen] Error fetching devices:', error);
       Alert.alert('Lỗi', error.message || 'Không thể tải danh sách thiết bị');
@@ -49,7 +110,7 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [showDowngradeSelectionPrompt]);
 
   // Fetch devices mỗi khi màn hình được focus
   useFocusEffect(
@@ -221,6 +282,18 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
               <Text style={styles.warningTitle}>Tính năng bị khóa</Text>
               <Text style={styles.warningText}>
                 Đăng ký dùng thử 7 ngày miễn phí hoặc nâng cấp để quản lý thiết bị
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {entitlementStatus?.requiresDeviceSelection && (
+          <View style={styles.warningBanner}>
+            <Text style={styles.warningIcon}>⚠️</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warningTitle}>Cần chọn thiết bị giữ lại</Text>
+              <Text style={styles.warningText}>
+                {entitlementStatus.message || 'Gói hiện tại chỉ hỗ trợ 1 thiết bị.'}
               </Text>
             </View>
           </View>

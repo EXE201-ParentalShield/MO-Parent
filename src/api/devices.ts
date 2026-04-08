@@ -138,6 +138,22 @@ export interface UsageReportResponse {
   };
 }
 
+export interface EntitlementDevice {
+  deviceId: number;
+  childName: string;
+  deviceName: string;
+  deviceUniqueId: string;
+}
+
+export interface DeviceEntitlementStatus {
+  hasAccess: boolean;
+  maxDevices: number;
+  currentDevices: number;
+  requiresDeviceSelection: boolean;
+  message?: string;
+  selectableDevices: EntitlementDevice[];
+}
+
 export const getUsageReport = async (
   childId: number,
   fromDate?: Date,
@@ -160,6 +176,38 @@ export const getUsageReport = async (
     return response.data.data;
   } catch (error) {
     logError(error, 'Devices.getUsageReport');
+    throw new Error(handleApiError(error));
+  }
+};
+
+export const getDeviceEntitlementStatus = async (): Promise<DeviceEntitlementStatus> => {
+  try {
+    const response = await apiClient.get<{
+      success: boolean;
+      message: string;
+      data: DeviceEntitlementStatus;
+    }>('/parent/device-entitlement');
+
+    return response.data.data;
+  } catch (error) {
+    logError(error, 'Devices.getDeviceEntitlementStatus');
+    throw new Error(handleApiError(error));
+  }
+};
+
+export const resolveDowngradeSelection = async (keptDeviceId: number): Promise<DeviceEntitlementStatus> => {
+  try {
+    const response = await apiClient.post<{
+      success: boolean;
+      message: string;
+      data: DeviceEntitlementStatus;
+    }>('/parent/resolve-downgrade', {
+      keptDeviceId,
+    });
+
+    return response.data.data;
+  } catch (error) {
+    logError(error, 'Devices.resolveDowngradeSelection');
     throw new Error(handleApiError(error));
   }
 };

@@ -8,10 +8,10 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
@@ -40,37 +40,40 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     email: '',
     phoneNumber: '',
   });
+  const [formError, setFormError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register } = useAuth();
 
-  const validateField = (field: keyof typeof formData, value: string) => {
+  const validateField = (field: keyof typeof formData, value: string, passwordValue = formData.password) => {
     let error = '';
-    
+
     switch (field) {
       case 'fullName':
         if (!value.trim()) {
           error = 'Họ và tên không được để trống';
         } else if (value.trim().length < 2) {
           error = 'Họ và tên phải có ít nhất 2 ký tự';
-        } else if (value.length > 100) {
+        } else if (value.trim().length > 100) {
           error = 'Họ và tên không được quá 100 ký tự';
         }
         break;
       case 'username':
         if (!value.trim()) {
           error = 'Tên đăng nhập không được để trống';
-        } else if (value.length < 3) {
+        } else if (value.trim().length < 3) {
           error = 'Tên đăng nhập phải có ít nhất 3 ký tự';
-        } else if (value.length > 50) {
+        } else if (value.trim().length > 50) {
           error = 'Tên đăng nhập không được quá 50 ký tự';
         }
         break;
       case 'email':
         if (!value.trim()) {
           error = 'Email không được để trống';
-        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
           error = 'Email không hợp lệ';
-        } else if (value.length > 100) {
+        } else if (value.trim().length > 100) {
           error = 'Email không được quá 100 ký tự';
         }
         break;
@@ -91,37 +94,75 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
       case 'confirmPassword':
         if (!value) {
           error = 'Xác nhận mật khẩu không được để trống';
-        } else if (value !== formData.password) {
+        } else if (value !== passwordValue) {
           error = 'Mật khẩu xác nhận không khớp';
         }
         break;
     }
-    
-    setErrors(prev => ({ ...prev, [field]: error }));
+
+    setErrors((prev) => ({ ...prev, [field]: error }));
     return error === '';
   };
 
   const validateForm = () => {
     const fields: (keyof typeof formData)[] = ['fullName', 'username', 'email', 'password', 'confirmPassword'];
     let isValid = true;
-    
-    fields.forEach(field => {
+
+    fields.forEach((field) => {
       if (!validateField(field, formData[field])) {
         isValid = false;
       }
     });
-    
-    // Validate optional phone if provided
-    if (formData.phoneNumber) {
-      if (!validateField('phoneNumber', formData.phoneNumber)) {
-        isValid = false;
-      }
+
+    if (formData.phoneNumber && !validateField('phoneNumber', formData.phoneNumber)) {
+      isValid = false;
     }
-    
+
     return isValid;
   };
 
+  const mapRegisterError = (message: string) => {
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('username')) {
+      setErrors((prev) => ({ ...prev, username: message }));
+      return;
+    }
+
+    if (normalized.includes('email')) {
+      setErrors((prev) => ({ ...prev, email: message }));
+      return;
+    }
+
+    if (normalized.includes('password') && normalized.includes('match')) {
+      setErrors((prev) => ({ ...prev, confirmPassword: 'Mật khẩu xác nhận không khớp' }));
+      return;
+    }
+
+    if (normalized.includes('full name')) {
+      setErrors((prev) => ({ ...prev, fullName: message }));
+      return;
+    }
+
+    if (normalized.includes('phone')) {
+      setErrors((prev) => ({ ...prev, phoneNumber: message }));
+      return;
+    }
+
+    setFormError(message || 'Đăng ký thất bại. Vui lòng thử lại.');
+  };
+
   const handleRegister = async () => {
+    setFormError('');
+    setErrors({
+      username: '',
+      password: '',
+      confirmPassword: '',
+      fullName: '',
+      email: '',
+      phoneNumber: '',
+    });
+
     if (!validateForm()) {
       return;
     }
@@ -129,28 +170,31 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     setIsLoading(true);
     try {
       await register(
-        formData.username,
+        formData.username.trim(),
         formData.password,
-        formData.fullName,
-        formData.email,
-        formData.phoneNumber
+        formData.fullName.trim(),
+        formData.email.trim(),
+        formData.phoneNumber.trim()
       );
-      // Registration successful, navigate to Trial screen
       navigation.replace('Trial');
     } catch (error: any) {
-      const errorMessage = error.message || 'Đăng ký thất bại. Vui lòng thử lại.';
-      // Set general error on password field
-      setErrors(prev => ({ ...prev, password: errorMessage }));
+      mapRegisterError(error.message || '');
     } finally {
       setIsLoading(false);
     }
   };
 
   const updateField = (field: keyof typeof formData, value: string) => {
-    setFormData({ ...formData, [field]: value });
-    // Clear error when user starts typing
+    const nextFormData = { ...formData, [field]: value };
+    setFormData(nextFormData);
+    setFormError('');
+
     if (errors[field]) {
-      validateField(field, value);
+      validateField(field, value, field === 'password' ? value : nextFormData.password);
+    }
+
+    if (field === 'password' && nextFormData.confirmPassword) {
+      validateField('confirmPassword', nextFormData.confirmPassword, value);
     }
   };
 
@@ -184,12 +228,14 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             </View>
 
             <View style={styles.form}>
+              {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>
                   Họ và tên <Text style={styles.required}>*</Text>
                 </Text>
                 <TextInput
-                  style={[styles.input, errors.fullName && styles.inputError]}
+                  style={[styles.input, errors.fullName ? styles.inputError : null]}
                   placeholder="Nguyễn Văn A"
                   value={formData.fullName}
                   onChangeText={(value) => updateField('fullName', value)}
@@ -204,8 +250,8 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                   Tên đăng nhập <Text style={styles.required}>*</Text>
                 </Text>
                 <TextInput
-                  style={[styles.input, errors.username && styles.inputError]}
-                  placeholder="username"
+                  style={[styles.input, errors.username ? styles.inputError : null]}
+                  placeholder="Nhập tên đăng nhập"
                   value={formData.username}
                   onChangeText={(value) => updateField('username', value)}
                   onBlur={() => validateField('username', formData.username)}
@@ -220,7 +266,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                   Email <Text style={styles.required}>*</Text>
                 </Text>
                 <TextInput
-                  style={[styles.input, errors.email && styles.inputError]}
+                  style={[styles.input, errors.email ? styles.inputError : null]}
                   placeholder="example@email.com"
                   value={formData.email}
                   onChangeText={(value) => updateField('email', value)}
@@ -235,7 +281,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Số điện thoại</Text>
                 <TextInput
-                  style={[styles.input, errors.phoneNumber && styles.inputError]}
+                  style={[styles.input, errors.phoneNumber ? styles.inputError : null]}
                   placeholder="0123456789"
                   value={formData.phoneNumber}
                   onChangeText={(value) => updateField('phoneNumber', value)}
@@ -250,15 +296,28 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.label}>
                   Mật khẩu <Text style={styles.required}>*</Text>
                 </Text>
-                <TextInput
-                  style={[styles.input, errors.password && styles.inputError]}
-                  placeholder="••••••••"
-                  value={formData.password}
-                  onChangeText={(value) => updateField('password', value)}
-                  onBlur={() => validateField('password', formData.password)}
-                  secureTextEntry
-                  editable={!isLoading}
-                />
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={[styles.input, errors.password ? styles.inputError : null]}
+                    placeholder="Nhập mật khẩu"
+                    value={formData.password}
+                    onChangeText={(value) => updateField('password', value)}
+                    onBlur={() => validateField('password', formData.password)}
+                    secureTextEntry={!showPassword}
+                    editable={!isLoading}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowPassword((prev) => !prev)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                      size={22}
+                      color="#9ca3af"
+                    />
+                  </TouchableOpacity>
+                </View>
                 {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
               </View>
 
@@ -266,26 +325,37 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
                 <Text style={styles.label}>
                   Xác nhận mật khẩu <Text style={styles.required}>*</Text>
                 </Text>
-                <TextInput
-                  style={[styles.input, errors.confirmPassword && styles.inputError]}
-                  placeholder="••••••••"
-                  value={formData.confirmPassword}
-                  onChangeText={(value) => updateField('confirmPassword', value)}
-                  onBlur={() => validateField('confirmPassword', formData.confirmPassword)}
-                  secureTextEntry
-                  editable={!isLoading}
-                />
+                <View style={styles.inputWrapper}>
+                  <TextInput
+                    style={[styles.input, errors.confirmPassword ? styles.inputError : null]}
+                    placeholder="Nhập lại mật khẩu"
+                    value={formData.confirmPassword}
+                    onChangeText={(value) => updateField('confirmPassword', value)}
+                    onBlur={() => validateField('confirmPassword', formData.confirmPassword)}
+                    secureTextEntry={!showConfirmPassword}
+                    editable={!isLoading}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeButton}
+                    onPress={() => setShowConfirmPassword((prev) => !prev)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'}
+                      size={22}
+                      color="#9ca3af"
+                    />
+                  </TouchableOpacity>
+                </View>
                 {errors.confirmPassword ? <Text style={styles.errorText}>{errors.confirmPassword}</Text> : null}
               </View>
 
               <TouchableOpacity
-                style={[styles.button, isLoading && styles.buttonDisabled]}
+                style={[styles.button, isLoading ? styles.buttonDisabled : null]}
                 onPress={handleRegister}
                 disabled={isLoading}
               >
-                <Text style={styles.buttonText}>
-                  {isLoading ? 'Đang đăng ký...' : 'Đăng ký'}
-                </Text>
+                <Text style={styles.buttonText}>{isLoading ? 'Đang đăng ký...' : 'Đăng ký'}</Text>
               </TouchableOpacity>
 
               <View style={styles.footer}>
@@ -352,18 +422,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
   subtitle: {
     fontSize: 14,
     color: '#374151',
-    opacity: 1,
     fontWeight: '600',
   },
   form: {
     width: '100%',
+  },
+  formError: {
+    color: '#B91C1C',
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginBottom: 16,
   },
   inputContainer: {
     marginBottom: 16,
@@ -377,10 +452,14 @@ const styles = StyleSheet.create({
   required: {
     color: '#ff6b6b',
   },
+  inputWrapper: {
+    position: 'relative',
+  },
   input: {
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 12,
     padding: 14,
+    paddingRight: 52,
     fontSize: 16,
     color: COLORS.text,
     shadowColor: COLORS.shadow,
@@ -390,6 +469,15 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 2,
     borderColor: 'transparent',
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 14,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 4,
   },
   inputError: {
     borderColor: '#EF4444',

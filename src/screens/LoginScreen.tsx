@@ -8,18 +8,15 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Alert,
-  Dimensions,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../utils/constants';
 import { getFreeTrialStatus } from '../api/freeTrial';
-
-const { width } = Dimensions.get('window');
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -30,30 +27,32 @@ interface Props {
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState({ username: '', password: '' });
+  const [formError, setFormError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
 
   const validateField = (field: 'username' | 'password', value: string) => {
     let error = '';
-    
+
     if (field === 'username') {
       if (!value.trim()) {
         error = 'Tên đăng nhập không được để trống';
-      } else if (value.length < 3) {
+      } else if (value.trim().length < 3) {
         error = 'Tên đăng nhập phải có ít nhất 3 ký tự';
-      } else if (value.length > 50) {
+      } else if (value.trim().length > 50) {
         error = 'Tên đăng nhập không được quá 50 ký tự';
       }
-    } else if (field === 'password') {
+    } else {
       if (!value) {
         error = 'Mật khẩu không được để trống';
       } else if (value.length < 6) {
         error = 'Mật khẩu phải có ít nhất 6 ký tự';
       }
     }
-    
-    setErrors(prev => ({ ...prev, [field]: error }));
+
+    setErrors((prev) => ({ ...prev, [field]: error }));
     return error === '';
   };
 
@@ -63,40 +62,47 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     return usernameValid && passwordValid;
   };
 
+  const mapLoginError = (message: string) => {
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes('username') && normalized.includes('required')) {
+      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không được để trống' }));
+      return;
+    }
+
+    if (normalized.includes('password') && normalized.includes('required')) {
+      setErrors((prev) => ({ ...prev, password: 'Mật khẩu không được để trống' }));
+      return;
+    }
+
+    setFormError(message || 'Đăng nhập thất bại. Vui lòng thử lại.');
+  };
+
   const handleLogin = async () => {
+    setFormError('');
+    setErrors({ username: '', password: '' });
+
     if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
     try {
-      await login(username, password);
-      
-      console.log('[Login] Login successful, checking trial status...');
-      
-      // Check trial status để quyết định navigate đi đâu
+      await login(username.trim(), password);
+
       try {
         const trialStatus = await getFreeTrialStatus();
-        console.log('[Login] Trial status:', JSON.stringify(trialStatus, null, 2));
-        
         if (trialStatus.hasTrial) {
-          // Đã có trial (dù active hay expired) → Dashboard
-          console.log('[Login] User has trial, navigating to Dashboard');
           navigation.replace('Dashboard');
         } else {
-          // Chưa có trial → Trial screen
-          console.log('[Login] User has no trial, navigating to Trial');
           navigation.replace('Trial');
         }
       } catch (trialError) {
         console.error('[Login] Error checking trial:', trialError);
-        // Nếu lỗi khi check trial, vào Dashboard
         navigation.replace('Dashboard');
       }
-      
     } catch (error: any) {
-      const errorMessage = error.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
-      setErrors(prev => ({ ...prev, password: errorMessage }));
+      mapLoginError(error.message || '');
     } finally {
       setIsLoading(false);
     }
@@ -123,19 +129,24 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
               />
             </View>
             <Text style={styles.title}>Shield Family</Text>
-            <Text style={styles.subtitle}>Dành cho Phụ huynh</Text>
+            <Text style={styles.subtitle}>Dành cho phụ huynh</Text>
           </View>
 
           <View style={styles.form}>
+            {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Tên đăng nhập</Text>
               <TextInput
-                style={[styles.input, errors.username && styles.inputError]}
-                placeholder="username"
+                style={[styles.input, errors.username ? styles.inputError : null]}
+                placeholder="Nhập tên đăng nhập"
                 value={username}
                 onChangeText={(text) => {
                   setUsername(text);
-                  if (errors.username) validateField('username', text);
+                  setFormError('');
+                  if (errors.username) {
+                    validateField('username', text);
+                  }
                 }}
                 onBlur={() => validateField('username', username)}
                 autoCapitalize="none"
@@ -146,29 +157,43 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Mật khẩu</Text>
-              <TextInput
-                style={[styles.input, errors.password && styles.inputError]}
-                placeholder="••••••••"
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  if (errors.password) validateField('password', text);
-                }}
-                onBlur={() => validateField('password', password)}
-                secureTextEntry
-                editable={!isLoading}
-              />
+              <View style={styles.inputWrapper}>
+                <TextInput
+                  style={[styles.input, errors.password ? styles.inputError : null]}
+                  placeholder="Nhập mật khẩu"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setFormError('');
+                    if (errors.password) {
+                      validateField('password', text);
+                    }
+                  }}
+                  onBlur={() => validateField('password', password)}
+                  secureTextEntry={!showPassword}
+                  editable={!isLoading}
+                />
+                <TouchableOpacity
+                  style={styles.eyeButton}
+                  onPress={() => setShowPassword((prev) => !prev)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                    size={22}
+                    color="#9ca3af"
+                  />
+                </TouchableOpacity>
+              </View>
               {errors.password ? <Text style={styles.errorText}>{errors.password}</Text> : null}
             </View>
 
             <TouchableOpacity
-              style={[styles.button, isLoading && styles.buttonDisabled]}
+              style={[styles.button, isLoading ? styles.buttonDisabled : null]}
               onPress={handleLogin}
               disabled={isLoading}
             >
-              <Text style={styles.buttonText}>
-                {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-              </Text>
+              {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Đăng nhập</Text>}
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.forgotPassword}>
@@ -234,17 +259,22 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#1f2937',
     marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.1)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
   subtitle: {
     fontSize: 16,
     color: '#374151',
-    opacity: 1,
   },
   form: {
     width: '100%',
+  },
+  formError: {
+    color: '#B91C1C',
+    backgroundColor: '#FEE2E2',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginBottom: 16,
   },
   inputContainer: {
     marginBottom: 20,
@@ -255,12 +285,16 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     marginBottom: 8,
   },
+  inputWrapper: {
+    position: 'relative',
+  },
   input: {
     height: 56,
     borderWidth: 2,
     borderColor: 'rgba(255, 255, 255, 0.3)',
     borderRadius: 16,
     paddingHorizontal: 20,
+    paddingRight: 52,
     fontSize: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     shadowColor: COLORS.shadow,
@@ -268,6 +302,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 3,
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 16,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 4,
   },
   inputError: {
     borderColor: '#EF4444',

@@ -6,15 +6,13 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  Linking as RNLinking,
-  AppState,
-  AppStateStatus,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
 import { storage } from '../utils/storage';
 import * as ExpoLinking from 'expo-linking';
+import { API_BASE_URL } from '../config/api';
 
 type UpgradePackageScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'UpgradePackage'>;
@@ -22,157 +20,6 @@ type UpgradePackageScreenProps = {
 
 const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
   const [loadingId, setLoadingId] = React.useState<number | null>(null);
-  const [isWaitingPayment, setIsWaitingPayment] = React.useState(false);
-  const pollingRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-  const appStateRef = React.useRef(AppState.currentState);
-  const pendingPaymentIdRef = React.useRef<number | null>(null);
-  const pendingTokenRef = React.useRef<string | null>(null);
-
-  const API_BASE_URL = 'https://be-ikk8.onrender.com';
-
-  const clearPaymentState = () => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-    pendingPaymentIdRef.current = null;
-    pendingTokenRef.current = null;
-    setIsWaitingPayment(false);
-  };
-
-  const handlePaymentResult = (data: any, success: boolean) => {
-    clearPaymentState();
-
-    if (success) {
-      navigation.navigate('PaymentResult', {
-        success: true,
-        packageName: data?.data?.description || 'Gói dịch vụ',
-        amount: new Intl.NumberFormat('vi-VN').format(data?.data?.amount) + 'đ',
-        transactionNo: data?.data?.providerTransactionNo,
-        paidAt: data?.data?.paidAt,
-      });
-    } else {
-      navigation.navigate('PaymentResult', {
-        success: false,
-        packageName: '',
-        amount: '',
-      });
-    }
-  };
-
-  const checkPaymentStatus = async (
-    paymentId: number,
-    token: string
-  ): Promise<'Success' | 'Failed' | 'Pending'> => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/Payment/${paymentId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return 'Pending';
-      const data = await res.json();
-      const status = data?.data?.status;
-
-      if (status === 'Success') {
-        handlePaymentResult(data, true);
-        return 'Success';
-      } else if (status === 'Failed' || status === 'Cancelled') {
-        handlePaymentResult(data, false);
-        return 'Failed';
-      }
-      return 'Pending';
-    } catch {
-      return 'Pending';
-    }
-  };
-
-  // Deep Link listener
-  React.useEffect(() => {
-    const handleDeepLink = (url: string) => {
-      if (!url.includes('payment-result')) return;
-
-      const query = url.split('?')[1] || '';
-      const params = Object.fromEntries(
-        query.split('&').map(p => {
-          const [k, v] = p.split('=');
-          return [k, decodeURIComponent(v || '')];
-        })
-      );
-
-      clearPaymentState();
-
-      navigation.navigate('PaymentResult', {
-        success: params.status === 'Success',
-        packageName: params.packageName || 'Gói dịch vụ',
-        amount: params.amount || '',
-        transactionNo: params.transactionNo,
-        paidAt: params.paidAt,
-      });
-    };
-
-    // App đang mở → nhận Deep Link
-    const deepLinkSub = RNLinking.addEventListener('url', ({ url }) => {
-      handleDeepLink(url);
-    });
-
-    // App bị tắt → được mở lại bằng Deep Link
-    RNLinking.getInitialURL().then((url) => {
-      if (url) handleDeepLink(url);
-    });
-
-    return () => deepLinkSub.remove();
-  }, []);
-
-  // AppState listener — kích hoạt ngay khi user quay lại app
-  React.useEffect(() => {
-    const subscription = AppState.addEventListener(
-      'change',
-      async (nextState: AppStateStatus) => {
-        if (
-          appStateRef.current === 'background' &&
-          nextState === 'active' &&
-          pendingPaymentIdRef.current &&
-          pendingTokenRef.current
-        ) {
-          await checkPaymentStatus(
-            pendingPaymentIdRef.current,
-            pendingTokenRef.current
-          );
-        }
-        appStateRef.current = nextState;
-      }
-    );
-
-    return () => {
-      subscription.remove();
-      if (pollingRef.current) clearInterval(pollingRef.current);
-    };
-  }, []);
-
-  const startPolling = (paymentId: number, token: string) => {
-    if (pollingRef.current) clearInterval(pollingRef.current);
-
-    let attempts = 0;
-    const maxAttempts = 24; // 24 x 5s = 2 phút
-
-    pollingRef.current = setInterval(async () => {
-      attempts++;
-
-      if (attempts > maxAttempts) {
-        clearInterval(pollingRef.current!);
-        pollingRef.current = null;
-        pendingPaymentIdRef.current = null;
-        pendingTokenRef.current = null;
-        setIsWaitingPayment(false);
-        Alert.alert(
-          'Hết thời gian',
-          'Không thể xác nhận kết quả thanh toán. Vui lòng kiểm tra lại lịch sử giao dịch.'
-        );
-        return;
-      }
-
-      await checkPaymentStatus(paymentId, token);
-    }, 5000);
-  };
 
   const packages = [
     {
@@ -283,19 +130,15 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
 
       if (!paymentUrl)
         throw new Error('Không nhận được URL thanh toán từ máy chủ');
+      if (!paymentId)
+        throw new Error('Không nhận được mã thanh toán từ máy chủ');
 
-      const supported = await RNLinking.canOpenURL(paymentUrl);
-      if (!supported)
-        throw new Error('Thiết bị không thể mở trình duyệt cho URL thanh toán');
-
-      await RNLinking.openURL(paymentUrl);
-
-      if (paymentId && token) {
-        pendingPaymentIdRef.current = paymentId;
-        pendingTokenRef.current = token;
-        setIsWaitingPayment(true);
-        startPolling(paymentId, token);
-      }
+      navigation.navigate('VNPayWebView', {
+        paymentUrl,
+        paymentId,
+        token,
+        packageName: pkg.name,
+      });
     } catch (e: any) {
       Alert.alert('Lỗi', e?.message || 'Không thể khởi tạo thanh toán');
     } finally {
@@ -305,23 +148,6 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
 
   return (
     <ScrollView style={styles.container}>
-      {/* Banner chờ xác nhận */}
-      {isWaitingPayment && (
-        <View style={styles.waitingBanner}>
-          <Text style={styles.waitingText}>
-            ⏳ Đang chờ xác nhận thanh toán... Vui lòng quay lại app sau khi
-            thanh toán xong.
-          </Text>
-          <TouchableOpacity
-            onPress={() => {
-              clearPaymentState();
-            }}
-          >
-            <Text style={styles.waitingCancel}>Hủy</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
@@ -364,11 +190,11 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
                   styles.upgradeButton,
                   {
                     backgroundColor: pkg.color,
-                    opacity: loadingId === pkg.id || isWaitingPayment ? 0.7 : 1,
+                    opacity: loadingId === pkg.id ? 0.7 : 1,
                   },
                 ]}
                 onPress={() => handleUpgrade(pkg)}
-                disabled={loadingId !== null || isWaitingPayment}
+                disabled={loadingId !== null}
               >
                 <Text style={styles.upgradeButtonText}>
                   {loadingId === pkg.id ? 'Đang khởi tạo...' : 'Nâng cấp ngay'}
@@ -397,28 +223,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  waitingBanner: {
-    backgroundColor: '#fff7ed',
-    borderLeftWidth: 4,
-    borderLeftColor: '#f97316',
-    padding: 16,
-    margin: 16,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  waitingText: {
-    fontSize: 13,
-    color: '#9a3412',
-    flex: 1,
-    lineHeight: 20,
-  },
-  waitingCancel: {
-    fontSize: 13,
-    color: '#f97316',
-    fontWeight: 'bold',
   },
   content: {
     padding: 16,

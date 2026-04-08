@@ -2,9 +2,10 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/constants';
+import { API_URL } from '../config/api';
 
 const apiClient = axios.create({
-  baseURL: 'https://be-ikk8.onrender.com/api', // Deployed API URL
+  baseURL: API_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
