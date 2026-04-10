@@ -56,7 +56,17 @@ const SettingsStoryScreen = ({ navigation }: SettingsStoryScreenProps) => {
     });
   };
 
-  const calculateDaysRemaining = () => {
+  const calculateCurrentAccessDaysRemaining = () => {
+    // Always prioritize paid package remaining days when package is active.
+    if (trialStatus?.isPaidActive && trialStatus?.activePackageExpiresAt) {
+      const paidExpireDate = new Date(trialStatus.activePackageExpiresAt);
+      return Math.max(0, Math.ceil((paidExpireDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+    }
+
+    if (typeof trialStatus?.trialRemainingDays === 'number') {
+      return Math.max(0, trialStatus.trialRemainingDays);
+    }
+
     if (!trialStatus?.expiresAt) return 0;
     const expiresDate = new Date(trialStatus.expiresAt);
     return Math.max(0, Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
@@ -147,20 +157,50 @@ const SettingsStoryScreen = ({ navigation }: SettingsStoryScreenProps) => {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Trạng thái gói dùng thử</Text>
+        <Text style={styles.sectionTitle}>Trạng thái quyền truy cập</Text>
         <View style={styles.card}>
           {loadingTrial ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
           ) : (
             <>
               <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Nguồn quyền hiện tại</Text>
+                <Text style={styles.infoValue}>
+                  {trialStatus?.accessSource === 'PaidPackage'
+                    ? 'Gói nâng cấp'
+                    : trialStatus?.accessSource === 'FreeTrial'
+                      ? 'Dùng thử miễn phí'
+                      : 'Chưa kích hoạt'}
+                </Text>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Có quyền truy cập</Text>
+                <Text style={styles.infoValue}>{trialStatus?.hasAccess ? 'Có' : 'Không'}</Text>
+              </View>
+              {trialStatus?.isPaidActive && (
+                <>
+                  <View style={styles.divider} />
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Gói nâng cấp</Text>
+                    <Text style={styles.infoValue}>{trialStatus.activePackageName || 'Gói dịch vụ'}</Text>
+                  </View>
+                  <View style={styles.divider} />
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>Gói nâng cấp hết hạn</Text>
+                    <Text style={styles.infoValue}>{formatDate(trialStatus.activePackageExpiresAt)}</Text>
+                  </View>
+                </>
+              )}
+              <View style={styles.divider} />
+              <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Đã đăng ký</Text>
                 <Text style={styles.infoValue}>{trialStatus?.hasTrial ? 'Có' : 'Chưa'}</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Đang hoạt động</Text>
-                <Text style={styles.infoValue}>{trialStatus?.isActive ? 'Có' : 'Không'}</Text>
+                <Text style={styles.infoLabel}>Dùng thử đang hoạt động</Text>
+                <Text style={styles.infoValue}>{trialStatus?.isTrialActive ?? trialStatus?.isActive ? 'Có' : 'Không'}</Text>
               </View>
               <View style={styles.divider} />
               <View style={styles.infoRow}>
@@ -172,12 +212,12 @@ const SettingsStoryScreen = ({ navigation }: SettingsStoryScreenProps) => {
                 <Text style={styles.infoLabel}>Hết hạn</Text>
                 <Text style={styles.infoValue}>{formatDate(trialStatus?.expiresAt)}</Text>
               </View>
-              {trialStatus?.isActive && (
+              {trialStatus?.hasAccess && (
                 <>
                   <View style={styles.divider} />
                   <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Còn lại</Text>
-                    <Text style={[styles.infoValue, styles.highlightValue]}>{calculateDaysRemaining()} ngày</Text>
+                    <Text style={styles.infoLabel}>Còn lại (gói hiện tại)</Text>
+                    <Text style={[styles.infoValue, styles.highlightValue]}>{calculateCurrentAccessDaysRemaining()} ngày</Text>
                   </View>
                 </>
               )}
@@ -193,20 +233,18 @@ const SettingsStoryScreen = ({ navigation }: SettingsStoryScreenProps) => {
         <Text style={styles.sectionTitle}>Dùng thử và thanh toán</Text>
         <View style={styles.card}>
           <Text style={styles.serviceTitle}>
-            {trialStatus?.isActive
-              ? 'Gói dùng thử 7 ngày vẫn đang hoạt động.'
+            {trialStatus?.isPaidActive
+              ? `${trialStatus.activePackageName || 'Gói nâng cấp'} đang hoạt động.`
+              : (trialStatus?.isTrialActive ?? trialStatus?.isActive)
+                ? 'Gói dùng thử 7 ngày vẫn đang hoạt động.'
               : trialStatus?.hasTrial
                 ? 'Bạn đã dùng xong trial, có thể nâng cấp bất kỳ lúc nào.'
                 : 'Bạn vẫn có thể bắt đầu trial 7 ngày hoặc xem các gói dịch vụ.'}
           </Text>
           <Text style={styles.serviceDescription}>
-            Các màn hình trial, nâng cấp gói và kết quả thanh toán được giữ nguyên logic cũ, chỉ
-            hiển thị lại rõ hơn trong giao diện mới.
+            Trạng thái quyền sử dụng được ưu tiên theo gói nâng cấp khi có thanh toán thành công.
           </Text>
           <View style={styles.serviceActions}>
-            <TouchableOpacity style={styles.serviceSecondaryButton} onPress={() => navigation.navigate('Trial')}>
-              <Text style={styles.serviceSecondaryButtonText}>Màn hình Trial</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={styles.servicePrimaryButton}
               onPress={() => navigation.navigate('UpgradePackage')}

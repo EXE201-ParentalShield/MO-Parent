@@ -1,7 +1,7 @@
 // Shield Parent App - Error Handler
 export const handleApiError = (error: any): string => {
   if (error.response) {
-    const { status, data } = error.response;
+    const { status, data, config } = error.response;
     
     // Extract message from response
     let message = data?.message || data?.Message || '';
@@ -26,7 +26,11 @@ export const handleApiError = (error: any): string => {
       case 400:
         return message || 'Dữ liệu không hợp lệ';
       case 401:
-        return 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại';
+        // Keep login failures as credential errors instead of session-expired.
+        if (config?.url?.includes('/auth/login')) {
+          return message || 'Tên đăng nhập hoặc mật khẩu không đúng';
+        }
+        return message || 'Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại';
       case 403:
         return 'Bạn không có quyền thực hiện thao tác này';
       case 404:
@@ -52,9 +56,11 @@ export const handleApiError = (error: any): string => {
 };
 
 export const logError = (error: any, context: string) => {
-  console.error(`[${context}]`, error);
-  if (error.response) {
-    console.error('Response data:', error.response.data);
-    console.error('Response status:', error.response.status);
+  if (!__DEV__) {
+    console.error(`[${context}]`, error);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+    }
   }
 };

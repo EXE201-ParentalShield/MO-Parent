@@ -19,6 +19,8 @@ const ActivityStoryScreen = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [sessions, setSessions] = useState<UsageSession[]>([]);
+  const [endedCountByDevice, setEndedCountByDevice] = useState<Record<number, number>>({});
+  const [activityLastSeenAt, setActivityLastSeenAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -38,11 +40,11 @@ const ActivityStoryScreen = () => {
     }
   }, [selectedDeviceId]);
 
-  const loadSessions = useCallback(async () => {
+  const loadSessions = useCallback(async (mode: 'initial' | 'refresh' | 'silent' = 'initial') => {
     if (!selectedDeviceId) return;
 
     try {
-      if (!isRefreshing) {
+      if (mode === 'initial') {
         setIsLoading(true);
       }
 
@@ -52,29 +54,80 @@ const ActivityStoryScreen = () => {
       console.error('[ActivityStoryScreen] Error loading sessions:', error);
       Alert.alert('Lỗi', error.message || 'Không thể tải lịch sử hoạt động');
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (mode === 'initial') {
+        setIsLoading(false);
+      }
+
+      if (mode === 'refresh') {
+        setIsRefreshing(false);
+      }
     }
-  }, [isRefreshing, selectedDeviceId]);
+  }, [selectedDeviceId]);
+
+  const loadEndedCountsByDevice = useCallback(async () => {
+    if (devices.length === 0 || !activityLastSeenAt) {
+      setEndedCountByDevice({});
+      return;
+    }
+
+    const lastSeenMs = new Date(activityLastSeenAt).getTime();
+    if (Number.isNaN(lastSeenMs)) {
+      setEndedCountByDevice({});
+      return;
+    }
+
+    const fromDate = new Date(lastSeenMs - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const sessionsByDevice = await Promise.all(
+      devices.map(async (device) => {
+        try {
+          const deviceSessions = await getUsageSessions(device.deviceId, fromDate);
+          const endedCount = deviceSessions.filter((session) => {
+            const ended = session.status.toLowerCase() !== 'active';
+            if (!ended) return false;
+
+            const endedMs = new Date(session.endTime || session.startTime).getTime();
+            return !Number.isNaN(endedMs) && endedMs > lastSeenMs;
+          }).length;
+
+          return [device.deviceId, endedCount] as const;
+        } catch {
+          return [device.deviceId, 0] as const;
+        }
+      })
+    );
+
+    const nextCounts = sessionsByDevice.reduce<Record<number, number>>((acc, [deviceId, count]) => {
+      acc[deviceId] = count;
+      return acc;
+    }, {});
+
+    setEndedCountByDevice(nextCounts);
+  }, [activityLastSeenAt, devices]);
 
   useFocusEffect(
     useCallback(() => {
-      AsyncStorage.setItem(STORAGE_KEYS.ACTIVITY_BADGE_LAST_SEEN_AT, new Date().toISOString()).catch(
-        () => undefined
-      );
+      const nowIso = new Date().toISOString();
+      AsyncStorage.setItem(STORAGE_KEYS.ACTIVITY_BADGE_LAST_SEEN_AT, nowIso).catch(() => undefined);
+      setActivityLastSeenAt(nowIso);
       loadDevices();
     }, [loadDevices])
   );
 
   useEffect(() => {
     if (selectedDeviceId) {
-      loadSessions();
+      loadSessions('initial');
     }
   }, [loadSessions, selectedDeviceId]);
 
+  useEffect(() => {
+    loadEndedCountsByDevice().catch(() => undefined);
+  }, [loadEndedCountsByDevice]);
+
   const onRefresh = () => {
     setIsRefreshing(true);
-    loadSessions();
+    loadSessions('refresh');
+    loadEndedCountsByDevice().catch(() => undefined);
   };
 
   const calculateActualUsed = (session: UsageSession) => {
@@ -175,9 +228,18 @@ const ActivityStoryScreen = () => {
                   style={[styles.deviceChip, active && styles.deviceChipActive]}
                   onPress={() => setSelectedDeviceId(device.deviceId)}
                 >
-                  <Text style={[styles.deviceChipTitle, active && styles.deviceChipTitleActive]}>
-                    {device.childName}
-                  </Text>
+                  <View style={styles.deviceChipTitleRow}>
+                    <Text style={[styles.deviceChipTitle, active && styles.deviceChipTitleActive]}>
+                      {device.childName}
+                    </Text>
+                    {(endedCountByDevice[device.deviceId] || 0) > 0 && (
+                      <View style={[styles.deviceCountBadge, active && styles.deviceCountBadgeActive]}>
+                        <Text style={[styles.deviceCountBadgeText, active && styles.deviceCountBadgeTextActive]}>
+                          {endedCountByDevice[device.deviceId] > 99 ? '99+' : endedCountByDevice[device.deviceId]}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={[styles.deviceChipSubtitle, active && styles.deviceChipSubtitleActive]}>
                     {device.deviceName}
                   </Text>
@@ -345,6 +407,32 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 4,
+  },
+  deviceChipTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  deviceCountBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DBEAFE',
+  },
+  deviceCountBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  deviceCountBadgeText: {
+    color: COLORS.primaryDark,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  deviceCountBadgeTextActive: {
+    color: '#fff',
   },
   deviceChipTitleActive: {
     color: '#fff',

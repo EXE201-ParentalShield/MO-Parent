@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,16 +15,17 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS, STORAGE_KEYS } from '../utils/constants';
-import { Device, getParentDevices } from '../api/devices';
+import { Device, DeviceEntitlementStatus, getDeviceEntitlementStatus, getParentDevices } from '../api/devices';
 import { AccessRequest, getPendingRequests } from '../api/requests';
 import { FreeTrialStatus, getFreeTrialStatus } from '../api/freeTrial';
 import { UsageSession, getUsageSessions } from '../api/usageSessions';
+import InAppNotificationBanner from '../components/InAppNotificationBanner';
 
 type DashboardScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Dashboard'>;
 };
 
-type MenuScreen = 'Activity' | 'AccessRequests' | 'Settings' | 'Devices';
+type MenuScreen = 'Activity' | 'AccessRequests' | 'Settings' | 'Devices' | 'AppsManagement';
 
 type StoryActivity = {
   id: string;
@@ -42,10 +43,37 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
   const [pendingRequests, setPendingRequests] = useState<AccessRequest[]>([]);
   const [usageSessions, setUsageSessions] = useState<UsageSession[]>([]);
   const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
+  const [entitlementStatus, setEntitlementStatus] = useState<DeviceEntitlementStatus | null>(null);
   const [activityLastSeenAt, setActivityLastSeenAt] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [inAppNotice, setInAppNotice] = useState<{ title: string; message?: string } | null>(null);
+  const pendingRequestIdsRef = useRef<number[]>([]);
+  const hasPendingBaselineRef = useRef(false);
+  const endedSessionIdsRef = useRef<number[]>([]);
+
+  const fetchRecentSessionsByDevices = useCallback(async (devicesData: Device[]) => {
+    if (devicesData.length === 0) {
+      return [] as UsageSession[];
+    }
+
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 7);
+
+    const sessionsByDevice = await Promise.all(
+      devicesData.map(async (device) => {
+        try {
+          return await getUsageSessions(device.deviceId, fromDate.toISOString());
+        } catch (error) {
+          console.log(`[DashboardStoryScreen] Could not load sessions for ${device.deviceId}`, error);
+          return [];
+        }
+      })
+    );
+
+    return sessionsByDevice.flat();
+  }, []);
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -53,10 +81,11 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
         setIsLoading(true);
       }
 
-      const [devicesData, requestsData, trialData] = await Promise.all([
+      const [devicesData, requestsData, trialData, entitlementData] = await Promise.all([
         getParentDevices(),
         getPendingRequests(),
         getFreeTrialStatus().catch(() => null),
+        getDeviceEntitlementStatus().catch(() => null),
       ]);
 
       const lastSeenAt = await AsyncStorage.getItem(STORAGE_KEYS.ACTIVITY_BADGE_LAST_SEEN_AT);
@@ -65,27 +94,31 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
       setDevices(devicesData);
       setPendingRequests(requestsData);
       setTrialStatus(trialData);
+      setEntitlementStatus(entitlementData);
 
-      if (devicesData.length === 0) {
-        setUsageSessions([]);
-        return;
+      const latestPendingIds = requestsData.map((request) => request.requestId);
+      if (hasPendingBaselineRef.current) {
+        const newRequests = requestsData.filter(
+          (request) => !pendingRequestIdsRef.current.includes(request.requestId)
+        );
+
+        if (newRequests.length > 0) {
+          const latestRequest = newRequests[0];
+          const childName = latestRequest.device?.childName || 'trẻ';
+          setInAppNotice({
+            title: '🔔 Có yêu cầu mới',
+            message: `${childName} vừa gửi yêu cầu cần phụ huynh duyệt.`,
+          });
+        }
       }
+      pendingRequestIdsRef.current = latestPendingIds;
+      hasPendingBaselineRef.current = true;
 
-      const fromDate = new Date();
-      fromDate.setDate(fromDate.getDate() - 7);
-
-      const sessionsByDevice = await Promise.all(
-        devicesData.map(async (device) => {
-          try {
-            return await getUsageSessions(device.deviceId, fromDate.toISOString());
-          } catch (error) {
-            console.log(`[DashboardStoryScreen] Could not load sessions for ${device.deviceId}`, error);
-            return [];
-          }
-        })
-      );
-
-      setUsageSessions(sessionsByDevice.flat());
+      const latestSessions = await fetchRecentSessionsByDevices(devicesData);
+      setUsageSessions(latestSessions);
+      endedSessionIdsRef.current = latestSessions
+        .filter((session) => session.status.toLowerCase() !== 'active')
+        .map((session) => session.usageSessionId);
       setHasLoadedOnce(true);
     } catch (error) {
       console.error('[DashboardStoryScreen] Error loading dashboard:', error);
@@ -93,7 +126,7 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [hasLoadedOnce, isRefreshing]);
+  }, [fetchRecentSessionsByDevices, hasLoadedOnce, isRefreshing]);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,30 +134,105 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
     }, [loadDashboardData])
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      const intervalId = setInterval(async () => {
+        try {
+          const latestRequests = await getPendingRequests();
+          const latestPendingIds = latestRequests.map((request) => request.requestId);
+
+          const newRequests = latestRequests.filter(
+            (request) => !pendingRequestIdsRef.current.includes(request.requestId)
+          );
+
+          if (hasPendingBaselineRef.current && newRequests.length > 0) {
+            const latestRequest = newRequests[0];
+            const childName = latestRequest.device?.childName || 'trẻ';
+            setInAppNotice({
+              title: '🔔 Có yêu cầu mới',
+              message: `${childName} vừa gửi yêu cầu cần phụ huynh duyệt.`,
+            });
+          }
+
+          pendingRequestIdsRef.current = latestPendingIds;
+          hasPendingBaselineRef.current = true;
+          setPendingRequests(latestRequests);
+
+          const latestSessions = await fetchRecentSessionsByDevices(devices);
+          const endedSessions = latestSessions.filter((session) => session.status.toLowerCase() !== 'active');
+          const newEndedSessions = endedSessions.filter(
+            (session) => !endedSessionIdsRef.current.includes(session.usageSessionId)
+          );
+
+          if (endedSessionIdsRef.current.length > 0 && newEndedSessions.length > 0) {
+            const latestEndedSession = newEndedSessions
+              .slice()
+              .sort((a, b) => new Date(b.endTime || b.startTime).getTime() - new Date(a.endTime || a.startTime).getTime())[0];
+            const device = devices.find((item) => item.deviceId === latestEndedSession.deviceId);
+            const childName = latestEndedSession.device?.childName || device?.childName || 'Bé';
+            const deviceName = latestEndedSession.device?.deviceName || device?.deviceName || 'thiết bị';
+            const usedMinutes = Math.max(0, latestEndedSession.allowedMinutes - latestEndedSession.remainingMinutes);
+
+            setInAppNotice({
+              title: '🔔 Phiên sử dụng vừa kết thúc',
+              message: `${childName} trên ${deviceName} đã kết thúc phiên (${usedMinutes} phút).`,
+            });
+          }
+
+          endedSessionIdsRef.current = endedSessions.map((session) => session.usageSessionId);
+          setUsageSessions(latestSessions);
+        } catch {
+          // Keep UI responsive even if polling fails occasionally.
+        }
+      }, 7000);
+
+      return () => clearInterval(intervalId);
+    }, [devices, fetchRecentSessionsByDevices])
+  );
+
   const onRefresh = () => {
     setIsRefreshing(true);
     loadDashboardData();
   };
 
+  const todayUsageSessions = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    return usageSessions.filter((session) => {
+      const startedAt = new Date(session.startTime);
+      return startedAt >= startOfToday && startedAt < startOfTomorrow;
+    });
+  }, [usageSessions]);
+
   const totalScreenTimeMinutes = useMemo(
     () =>
-      usageSessions.reduce((total, session) => {
+      todayUsageSessions.reduce((total, session) => {
         const used = Math.max(0, session.allowedMinutes - session.remainingMinutes);
         return total + used;
       }, 0),
-    [usageSessions]
+    [todayUsageSessions]
   );
 
   const activeDevicesCount = useMemo(
     () =>
-      devices.filter((device) => {
-        const normalized = device.status.toLowerCase();
-        return normalized === 'active' || device.status === '1';
-      }).length,
-    [devices]
+      new Set(
+        usageSessions
+          .filter((session) => session.status.toLowerCase() === 'active')
+          .map((session) => session.deviceId)
+      ).size,
+    [usageSessions]
   );
 
-  const hasActiveAccess = () => trialStatus?.isActive === true;
+  const hasActiveAccess = () => (trialStatus?.hasAccess ?? trialStatus?.isActive) === true;
+  const hasPaidAccess =
+    trialStatus?.isPaidActive === true ||
+    trialStatus?.accessSource === 'PaidPackage' ||
+    // Fallback for legacy /FreeTrial/status responses: monthly package supports 2 devices.
+    entitlementStatus?.maxDevices === 2;
+  const hasTrialAccess =
+    trialStatus?.isTrialActive === true || (!hasPaidAccess && trialStatus?.isActive === true);
 
   const getTimeAgo = (date: Date) => {
     const now = new Date();
@@ -140,19 +248,6 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
   };
 
   const storyInsight = useMemo(() => {
-    if (pendingRequests.length > 0) {
-      return {
-        icon: '📩',
-        accent: '#FEF3C7',
-        textColor: '#92400E',
-        title:
-          pendingRequests.length === 1
-            ? 'Có 1 yêu cầu đang chờ bạn phê duyệt.'
-            : `Có ${pendingRequests.length} yêu cầu đang chờ bạn xem lại.`,
-        subtitle: 'Xử lý sớm sẽ giúp con không phải chờ quá lâu.',
-      };
-    }
-
     if (totalScreenTimeMinutes > 0) {
       const hourText =
         totalScreenTimeMinutes < 60
@@ -191,7 +286,7 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
       title: 'Bạn đã sẵn sàng bắt đầu theo dõi cho gia đình.',
       subtitle: 'Hãy thêm thiết bị đầu tiên để xem báo cáo và yêu cầu của con.',
     };
-  }, [devices.length, pendingRequests.length, totalScreenTimeMinutes]);
+  }, [devices.length, totalScreenTimeMinutes]);
 
   const recentActivities = useMemo<StoryActivity[]>(() => {
     const sessionItems: StoryActivity[] = usageSessions
@@ -294,8 +389,19 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
   };
 
   const calculateDaysRemaining = () => {
+    if (typeof trialStatus?.trialRemainingDays === 'number') {
+      return Math.max(0, trialStatus.trialRemainingDays);
+    }
+
     if (!trialStatus?.expiresAt) return 0;
     const expiresDate = new Date(trialStatus.expiresAt);
+    const now = new Date();
+    return Math.max(0, Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+  };
+
+  const calculatePaidDaysRemaining = (): number | null => {
+    if (!trialStatus?.activePackageExpiresAt) return null;
+    const expiresDate = new Date(trialStatus.activePackageExpiresAt);
     const now = new Date();
     return Math.max(0, Math.ceil((expiresDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
   };
@@ -329,14 +435,29 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
       screen: 'Settings' as const,
       requiresTrial: false,
     },
+    {
+      icon: '🧩',
+      title: 'Quản lý ứng dụng',
+      description: 'Xem danh sách app của bé và vào CRUD video cho YouTube.',
+      screen: 'AppsManagement' as const,
+      requiresTrial: true,
+    },
   ];
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
-    >
+    <View style={styles.screen}>
+      <InAppNotificationBanner
+        visible={!!inAppNotice}
+        title={inAppNotice?.title || ''}
+        message={inAppNotice?.message}
+        tone="info"
+        onDismiss={() => setInAppNotice(null)}
+      />
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
+      >
       <LinearGradient colors={[COLORS.backgroundGradientStart, COLORS.backgroundGradientEnd]} style={styles.hero}>
         <Text style={styles.heroEyebrow}>Parent Assistant</Text>
         <Text style={styles.heroTitle}>Tổng quan hôm nay</Text>
@@ -371,12 +492,31 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
             </View>
           </View>
 
-          {trialStatus?.isActive ? (
+          {hasPaidAccess ? (
+            <View style={[styles.bannerCard, styles.bannerSuccess]}>
+              <Text style={styles.bannerTitle}>✨ Gói nâng cấp đang hoạt động</Text>
+              {calculatePaidDaysRemaining() !== null ? (
+                <Text style={styles.bannerText}>
+                  {trialStatus?.activePackageName || 'Gói dịch vụ'} còn {calculatePaidDaysRemaining()} ngày sử dụng.
+                </Text>
+              ) : (
+                <Text style={styles.bannerText}>
+                  {trialStatus?.activePackageName || 'Gói dịch vụ'} đã được kích hoạt và đang hoạt động.
+                </Text>
+              )}
+            </View>
+          ) : hasTrialAccess ? (
             <View style={[styles.bannerCard, styles.bannerSuccess]}>
               <Text style={styles.bannerTitle}>🎁 Gói dùng thử đang hoạt động</Text>
               <Text style={styles.bannerText}>
                 Bạn còn {calculateDaysRemaining()} ngày để trải nghiệm đầy đủ tính năng.
               </Text>
+              <TouchableOpacity
+                style={styles.bannerQuestionButton}
+                onPress={() => navigation.navigate('UpgradePackage')}
+              >
+                <Text style={styles.bannerQuestionButtonText}>Bạn muốn nâng cấp gói?</Text>
+              </TouchableOpacity>
             </View>
           ) : (
             <View style={[styles.bannerCard, styles.bannerInfo]}>
@@ -394,7 +534,7 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
                   style={styles.primaryButton}
                   onPress={() => navigation.navigate('UpgradePackage')}
                 >
-                  <Text style={styles.primaryButtonText}>Nâng cấp</Text>
+                  <Text style={styles.primaryButtonText}>Bạn muốn nâng cấp gói?</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -513,7 +653,8 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
           </View>
         </>
       )}
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 };
 
@@ -526,6 +667,9 @@ const baseShadow = {
 };
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -639,6 +783,12 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     lineHeight: 20,
   },
+  bannerSubText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
   bannerActions: {
     flexDirection: 'row',
     gap: 10,
@@ -662,6 +812,19 @@ const styles = StyleSheet.create({
     borderRadius: 14,
   },
   secondaryButtonText: {
+    color: COLORS.primaryDark,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  bannerQuestionButton: {
+    marginTop: 12,
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  bannerQuestionButtonText: {
     color: COLORS.primaryDark,
     fontWeight: '700',
     fontSize: 14,

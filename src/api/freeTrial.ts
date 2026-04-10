@@ -7,6 +7,14 @@ export interface FreeTrialStatus {
   isActive: boolean;        // Đang trong thời gian dùng thử hay không
   startedAt?: string;       // Thời gian bắt đầu
   expiresAt?: string;       // Thời gian hết hạn
+  hasAccess?: boolean;      // Có quyền truy cập (trial hoặc paid)
+  isTrialActive?: boolean;
+  isPaidActive?: boolean;
+  accessSource?: 'PaidPackage' | 'FreeTrial' | 'None';
+  activePackageName?: string;
+  activePackageStartedAt?: string;
+  activePackageExpiresAt?: string;
+  trialRemainingDays?: number;
 }
 
 export interface FreeTrialRegisterResponse {

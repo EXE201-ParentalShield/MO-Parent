@@ -1,20 +1,25 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '../utils/constants';
 import { Device, getParentDevices } from '../api/devices';
 import { AccessRequest, approveRequest, getPendingRequests, rejectRequest } from '../api/requests';
+import InAppNotificationBanner from '../components/InAppNotificationBanner';
 
 type ActiveModal =
   | { type: 'approve'; request: AccessRequest }
@@ -30,12 +35,17 @@ const AccessRequestsStoryScreen = () => {
   const [activeModal, setActiveModal] = useState<ActiveModal>(null);
   const [approvedMinutes, setApprovedMinutes] = useState('');
   const [parentNote, setParentNote] = useState('');
+  const [inAppNotice, setInAppNotice] = useState<{ title: string; message?: string } | null>(null);
+  const pendingRequestIdsRef = useRef<number[]>([]);
+  const hasPendingBaselineRef = useRef(false);
 
   const fetchRequests = useCallback(async () => {
     try {
       const [requestsData, devicesData] = await Promise.all([getPendingRequests(), getParentDevices()]);
       setRequests(requestsData);
       setDevices(devicesData);
+      pendingRequestIdsRef.current = requestsData.map((request) => request.requestId);
+      hasPendingBaselineRef.current = true;
     } catch (error: any) {
       console.error('[AccessRequestsStoryScreen] Error:', error);
       Alert.alert('Lỗi', error.message || 'Không thể tải danh sách yêu cầu');
@@ -50,6 +60,38 @@ const AccessRequestsStoryScreen = () => {
       setIsLoading(true);
       fetchRequests();
     }, [fetchRequests])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const intervalId = setInterval(async () => {
+        try {
+          const latestRequests = await getPendingRequests();
+          const latestPendingIds = latestRequests.map((request) => request.requestId);
+
+          const newRequests = latestRequests.filter(
+            (request) => !pendingRequestIdsRef.current.includes(request.requestId)
+          );
+
+          if (hasPendingBaselineRef.current && newRequests.length > 0) {
+            const latestRequest = newRequests[0];
+            const childName = latestRequest.device?.childName || 'Bé';
+            setInAppNotice({
+              title: '🔔 Có yêu cầu mới',
+              message: `${childName} vừa gửi yêu cầu cần bạn phê duyệt.`,
+            });
+          }
+
+          pendingRequestIdsRef.current = latestPendingIds;
+          hasPendingBaselineRef.current = true;
+          setRequests(latestRequests);
+        } catch {
+          // Polling is best-effort to keep screen responsive.
+        }
+      }, 5000);
+
+      return () => clearInterval(intervalId);
+    }, [])
   );
 
   const onRefresh = () => {
@@ -160,9 +202,23 @@ const AccessRequestsStoryScreen = () => {
 
   return (
     <>
+      <InAppNotificationBanner
+        visible={!!inAppNotice}
+        title={inAppNotice?.title || ''}
+        message={inAppNotice?.message}
+        onDismiss={() => setInAppNotice(null)}
+      />
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.hero}>
@@ -221,9 +277,21 @@ const AccessRequestsStoryScreen = () => {
           </View>
         )}
       </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
 
       <Modal visible={!!activeModal} transparent animationType="slide" onRequestClose={closeModal}>
-        <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
               {activeModal?.type === 'approve' ? 'Phê duyệt yêu cầu' : 'Từ chối yêu cầu'}
@@ -279,7 +347,9 @@ const AccessRequestsStoryScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
     </>
   );
@@ -452,6 +522,10 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'flex-end',
     backgroundColor: 'rgba(15, 23, 42, 0.35)',
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-end',
   },
   modalCard: {
     backgroundColor: '#fff',

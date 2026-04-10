@@ -7,8 +7,11 @@ import {
   StyleSheet,
   Image,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ActivityIndicator,
+  ScrollView,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,7 +19,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../utils/constants';
-import { getFreeTrialStatus } from '../api/freeTrial';
 
 type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
@@ -70,8 +72,41 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
+    if (normalized.includes('username') && (normalized.includes('not found') || normalized.includes('không tồn tại'))) {
+      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không đúng' }));
+      return;
+    }
+
+    if (normalized.includes('invalid username')) {
+      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không đúng' }));
+      return;
+    }
+
     if (normalized.includes('password') && normalized.includes('required')) {
       setErrors((prev) => ({ ...prev, password: 'Mật khẩu không được để trống' }));
+      return;
+    }
+
+    if (normalized.includes('password') && (normalized.includes('invalid') || normalized.includes('incorrect') || normalized.includes('không đúng'))) {
+      setErrors((prev) => ({ ...prev, password: 'Mật khẩu không đúng' }));
+      return;
+    }
+
+    if (normalized.includes('invalid credentials') || normalized.includes('invalid username or password')) {
+      setErrors((prev) => ({
+        ...prev,
+        username: 'Tên đăng nhập hoặc mật khẩu không đúng',
+        password: 'Tên đăng nhập hoặc mật khẩu không đúng',
+      }));
+      return;
+    }
+
+    if (normalized.includes('tên đăng nhập hoặc mật khẩu không đúng')) {
+      setErrors((prev) => ({
+        ...prev,
+        username: 'Tên đăng nhập hoặc mật khẩu không đúng',
+        password: 'Tên đăng nhập hoặc mật khẩu không đúng',
+      }));
       return;
     }
 
@@ -89,18 +124,6 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setIsLoading(true);
     try {
       await login(username.trim(), password);
-
-      try {
-        const trialStatus = await getFreeTrialStatus();
-        if (trialStatus.hasTrial) {
-          navigation.replace('Dashboard');
-        } else {
-          navigation.replace('Trial');
-        }
-      } catch (trialError) {
-        console.error('[Login] Error checking trial:', trialError);
-        navigation.replace('Dashboard');
-      }
     } catch (error: any) {
       mapLoginError(error.message || '');
     } finally {
@@ -116,8 +139,16 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 22 : 0}
         style={styles.container}
       >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+          >
         <View style={styles.content}>
           <View style={styles.logoContainer}>
             <View style={styles.logoWrapper}>
@@ -208,6 +239,8 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
         </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -220,10 +253,14 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   content: {
     flex: 1,
     justifyContent: 'center',
     paddingHorizontal: 24,
+    paddingVertical: 24,
   },
   logoContainer: {
     alignItems: 'center',

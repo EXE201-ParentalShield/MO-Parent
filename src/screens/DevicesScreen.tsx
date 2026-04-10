@@ -38,6 +38,8 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
   const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
   const [entitlementStatus, setEntitlementStatus] = useState<DeviceEntitlementStatus | null>(null);
   const isShowingSelectionPromptRef = useRef(false);
+  const isFetchingRef = useRef(false);
+  const lastFocusFetchAtRef = useRef(0);
 
   const showDowngradeSelectionPrompt = useCallback((status: DeviceEntitlementStatus) => {
     if (isShowingSelectionPromptRef.current) {
@@ -82,20 +84,22 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
   }, []);
 
   const fetchDevices = useCallback(async () => {
+    if (isFetchingRef.current) {
+      return;
+    }
+
+    isFetchingRef.current = true;
+
     try {
-      console.log('[DevicesScreen] Fetching devices...');
       const [devicesData, trialData, currentEntitlement] = await Promise.all([
         getParentDevices(),
         getFreeTrialStatus().catch(err => {
-          console.log('[DevicesScreen] Could not load trial status:', err);
           return null;
         }),
         getDeviceEntitlementStatus().catch(err => {
-          console.log('[DevicesScreen] Could not load entitlement status:', err);
           return null;
         }),
       ]);
-      console.log('[DevicesScreen] Fetched devices count:', devicesData.length);
       setDevices(devicesData);
       setTrialStatus(trialData);
       setEntitlementStatus(currentEntitlement);
@@ -104,9 +108,9 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
         showDowngradeSelectionPrompt(currentEntitlement);
       }
     } catch (error: any) {
-      console.error('[DevicesScreen] Error fetching devices:', error);
       Alert.alert('Lỗi', error.message || 'Không thể tải danh sách thiết bị');
     } finally {
+      isFetchingRef.current = false;
       setIsLoading(false);
       setIsRefreshing(false);
     }
@@ -115,7 +119,12 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
   // Fetch devices mỗi khi màn hình được focus
   useFocusEffect(
     useCallback(() => {
-      console.log('[DevicesScreen] Screen focused, fetching devices...');
+      const now = Date.now();
+      if (now - lastFocusFetchAtRef.current < 1500) {
+        return;
+      }
+
+      lastFocusFetchAtRef.current = now;
       setIsLoading(true);
       fetchDevices();
     }, [fetchDevices])
@@ -126,14 +135,16 @@ const DevicesScreen: React.FC<Props> = ({ navigation }) => {
     fetchDevices();
   };
 
-  // Check if user has active trial or subscription
+  // Check if user has active trial or paid package access
   const hasActiveAccess = (): boolean => {
+    const hasAccess =
+      entitlementStatus?.hasAccess === true ||
+      trialStatus?.hasAccess === true ||
+      trialStatus?.isActive === true;
+    console.log('[DevicesScreen] Checking access - entitlementStatus:', JSON.stringify(entitlementStatus, null, 2));
     console.log('[DevicesScreen] Checking access - trialStatus:', JSON.stringify(trialStatus, null, 2));
-    const hasAccess = trialStatus?.isActive === true;
     console.log('[DevicesScreen] Has active access:', hasAccess);
     return hasAccess;
-    // TODO: Add subscription check when payment is implemented
-    // return trialStatus?.isActive === true || hasActiveSubscription;
   };
 
   const showUpgradeAlert = () => {

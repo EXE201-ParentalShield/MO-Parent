@@ -90,9 +90,11 @@ const DashboardScreen = ({ navigation }: DashboardScreenProps) => {
   };
 
   // Calculate stats
-  const activeDevicesCount = devices.filter(d => 
-    d.status.toLowerCase() === 'active' || d.status === '1'
-  ).length;
+  const activeDevicesCount = new Set(
+    usageSessions
+      .filter((session) => session.status.toLowerCase() === 'active')
+      .map((session) => session.deviceId)
+  ).size;
   const pendingRequestsCount = pendingRequests.length;
   
   const totalScreenTimeMinutes = usageSessions.reduce((total, session) => {

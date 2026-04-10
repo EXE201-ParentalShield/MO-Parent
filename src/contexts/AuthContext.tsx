@@ -31,12 +31,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      const token = await storage.getToken();
-      const userData = await storage.getUserData();
-      
-      if (token && userData) {
-        setUser(userData);
-      }
+      // Always start unauthenticated on fresh app launch.
+      await storage.clearAll();
+      setUser(null);
     } catch (error) {
       console.error('Error checking auth:', error);
     } finally {
