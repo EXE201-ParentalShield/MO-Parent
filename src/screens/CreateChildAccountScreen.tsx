@@ -8,8 +8,10 @@ import {
   Alert,
   ScrollView,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
-  Dimensions
+  Dimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -143,9 +145,16 @@ const CreateChildAccountScreen = ({ navigation }: CreateChildAccountScreenProps)
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 22 : 0}
         style={styles.container}
       >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+        >
           <View style={styles.content}>
             <View style={styles.header}>
               <Text style={styles.title}>Tạo tài khoản cho trẻ</Text>
@@ -232,6 +241,7 @@ const CreateChildAccountScreen = ({ navigation }: CreateChildAccountScreenProps)
             </View>
           </View>
         </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </LinearGradient>
   );

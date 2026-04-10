@@ -4,6 +4,8 @@ import { handleApiError, logError } from './errorHandler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../utils/constants';
 
+let parentDevicesInFlight: Promise<Device[]> | null = null;
+
 // Helper to decode JWT and get userId
 const getParentIdFromToken = async (): Promise<number | null> => {
   try {
@@ -56,45 +58,41 @@ export interface LockUnlockResponse {
 }
 
 export const getParentDevices = async (): Promise<Device[]> => {
-  try {
-    // Log parentId from JWT token
-    const parentIdFromToken = await getParentIdFromToken();
-    console.log('[Devices.getParentDevices] ParentId from JWT token:', parentIdFromToken);
-    
-    // Log token
-    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-    console.log('[Devices.getParentDevices] Token exists:', !!token);
-    if (token) {
-      console.log('[Devices.getParentDevices] Token (first 50 chars):', token.substring(0, 50));
-    }
-    
-    const response = await apiClient.get<DeviceResponse>('/parent/devices');
-    console.log('[Devices.getParentDevices] Response status:', response.status);
-    console.log('[Devices.getParentDevices] Response data:', JSON.stringify(response.data, null, 2));
-    
-    if (!response.data) {
-      console.error('[Devices.getParentDevices] No data in response');
-      return [];
-    }
-    
-    // Handle both response.data and response.data.data
-    const devices = response.data.data || response.data;
-    
-    if (!Array.isArray(devices)) {
-      console.error('[Devices.getParentDevices] Data is not an array:', devices);
-      return [];
-    }
-    
-    console.log('[Devices.getParentDevices] Devices count:', devices.length);
-    if (devices.length > 0) {
-      console.log('[Devices.getParentDevices] First device:', JSON.stringify(devices[0], null, 2));
-    }
-    return devices;
-  } catch (error) {
-    logError(error, 'Devices.getParentDevices');
-    console.error('[Devices.getParentDevices] Error details:', error);
-    throw new Error(handleApiError(error));
+  if (parentDevicesInFlight) {
+    return parentDevicesInFlight;
   }
+
+  parentDevicesInFlight = (async () => {
+    try {
+      // Keep a lightweight debug signal instead of verbose token/device dumps.
+      const parentIdFromToken = await getParentIdFromToken();
+      if (__DEV__) {
+        console.log('[Devices.getParentDevices] Fetching devices for parent:', parentIdFromToken);
+      }
+
+      const response = await apiClient.get<DeviceResponse>('/parent/devices');
+
+      if (!response.data) {
+        return [];
+      }
+
+      // Handle both response.data and response.data.data
+      const devices = response.data.data || response.data;
+
+      if (!Array.isArray(devices)) {
+        return [];
+      }
+
+      return devices;
+    } catch (error) {
+      logError(error, 'Devices.getParentDevices');
+      throw new Error(handleApiError(error));
+    } finally {
+      parentDevicesInFlight = null;
+    }
+  })();
+
+  return parentDevicesInFlight;
 };
 
 export const lockDevice = async (deviceId: number, reason?: string): Promise<LockUnlockResponse> => {

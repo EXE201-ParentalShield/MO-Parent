@@ -10,6 +10,10 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';  
 import { COLORS } from '../utils/constants';
@@ -151,8 +155,16 @@ const AccessRequestsScreen = () => {
 
   return (
     <>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 16 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <ScrollView 
         style={styles.container}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
         }
@@ -213,6 +225,8 @@ const AccessRequestsScreen = () => {
           )}
         </View>
       </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
 
       {/* Approve Modal */}
       <Modal
@@ -221,7 +235,17 @@ const AccessRequestsScreen = () => {
         animationType="slide"
         onRequestClose={() => setShowApproveModal(false)}
       >
-        <View style={styles.modalOverlay}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        >
+          <ScrollView
+            contentContainerStyle={styles.modalScrollContent}
+            keyboardShouldPersistTaps="handled"
+            bounces={false}
+          >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Chấp nhận yêu cầu</Text>
             <Text style={styles.modalSubtitle}>
@@ -266,7 +290,9 @@ const AccessRequestsScreen = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
     </>
   );
@@ -402,6 +428,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    width: '100%',
   },
   modalContent: {
     backgroundColor: '#fff',

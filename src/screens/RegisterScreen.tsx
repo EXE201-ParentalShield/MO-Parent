@@ -7,8 +7,10 @@ import {
   StyleSheet,
   Image,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   ScrollView,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -206,12 +208,15 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 22 : 0}
         style={styles.container}
       >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           <View style={styles.content}>
             <View style={styles.logoContainer}>
@@ -367,6 +372,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
             </View>
           </View>
         </ScrollView>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </LinearGradient>
   );

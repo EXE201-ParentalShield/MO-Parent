@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
+import { getFreeTrialStatus } from '../api/freeTrial';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
@@ -18,6 +19,8 @@ import UpgradePackageScreen from '../screens/UpgradePackageScreen';
 import PaymentResultScreen from '../screens/PaymentResultScreen';
 import FeatureIntroductionScreen from '../screens/FeatureIntroductionScreen';
 import VNPayWebViewScreen from '../screens/VNPayWebViewScreen';
+import AppsManagementScreen from '../screens/AppsManagementScreen';
+import VideoManagementScreen from '../screens/VideoManagementScreen';
 
 export type RootStackParamList = {
   FeatureIntroduction: undefined;
@@ -29,6 +32,10 @@ export type RootStackParamList = {
   Devices: undefined;
   AccessRequests: undefined;
   Settings: undefined;
+  AppsManagement: undefined;
+  VideoManagement: {
+    appName?: string;
+  };
   CreateChildAccount: undefined;
   AddDevice: undefined;
   UpgradePackage: undefined;
@@ -51,8 +58,50 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const [initialAuthenticatedRoute, setInitialAuthenticatedRoute] = useState<'Dashboard' | 'Trial'>('Dashboard');
+  const [isResolvingInitialRoute, setIsResolvingInitialRoute] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    let isMounted = true;
+
+    const resolveInitialRoute = async () => {
+      if (!isAuthenticated) {
+        if (isMounted) {
+          setInitialAuthenticatedRoute('Dashboard');
+          setIsResolvingInitialRoute(false);
+        }
+        return;
+      }
+
+      if (isMounted) {
+        setIsResolvingInitialRoute(true);
+      }
+
+      try {
+        const trialStatus = await getFreeTrialStatus();
+        if (isMounted) {
+          setInitialAuthenticatedRoute(trialStatus.hasTrial ? 'Dashboard' : 'Trial');
+        }
+      } catch (error) {
+        console.error('[AppNavigator] Failed to resolve initial route:', error);
+        if (isMounted) {
+          setInitialAuthenticatedRoute('Dashboard');
+        }
+      } finally {
+        if (isMounted) {
+          setIsResolvingInitialRoute(false);
+        }
+      }
+    };
+
+    resolveInitialRoute();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
+  if (isLoading || (isAuthenticated && isResolvingInitialRoute)) {
     return null; // or a loading screen
   }
 
@@ -60,7 +109,7 @@ export const AppNavigator = () => {
     <NavigationContainer>
       <Stack.Navigator
         key={isAuthenticated ? 'authenticated' : 'unauthenticated'}
-        initialRouteName={isAuthenticated ? 'Dashboard' : 'Login'}
+        initialRouteName={isAuthenticated ? initialAuthenticatedRoute : 'Login'}
         screenOptions={{
           headerStyle: {
             backgroundColor: '#3B82F6',
@@ -129,6 +178,16 @@ export const AppNavigator = () => {
               name="Settings" 
               component={SettingsScreen}
               options={{ title: 'Cài đặt' }}
+            />
+            <Stack.Screen
+              name="AppsManagement"
+              component={AppsManagementScreen}
+              options={{ title: 'Quản lý ứng dụng' }}
+            />
+            <Stack.Screen
+              name="VideoManagement"
+              component={VideoManagementScreen}
+              options={{ title: 'Quản lý video YouTube' }}
             />
             <Stack.Screen 
               name="CreateChildAccount" 

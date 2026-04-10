@@ -54,14 +54,7 @@ const TrialScreen: React.FC<Props> = ({ navigation }) => {
   const handleStartTrial = async () => {
     // Kiểm tra nếu đã có trial
     if (trialStatus?.hasTrial && !trialStatus?.isActive) {
-      Alert.alert(
-        'Thông báo',
-        'Bạn đã sử dụng hết thời gian dùng thử. Vui lòng nâng cấp để tiếp tục sử dụng.',
-        [
-          { text: 'Hủy', style: 'cancel' },
-          { text: 'Nâng cấp ngay', onPress: () => navigation.navigate('UpgradePackage') }
-        ]
-      );
+      navigation.navigate('UpgradePackage');
       return;
     }
 
@@ -190,7 +183,7 @@ const TrialScreen: React.FC<Props> = ({ navigation }) => {
     }
     if (trialStatus?.hasTrial && !trialStatus?.isActive) {
       return {
-        text: 'Nâng cấp ngay',
+        text: 'Bạn muốn nâng cấp gói?',
         disabled: false,
       };
     }
