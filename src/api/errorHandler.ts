@@ -18,6 +18,12 @@ export const handleApiError = (error: any): string => {
       'Email already registered': 'Email đã tồn tại',
       'Phone number already exists': 'Số điện thoại đã tồn tại',
       'Phone already exists': 'Số điện thoại đã tồn tại',
+      'Email not found': 'Không tìm thấy email này',
+      'Cannot send OTP email': 'Không thể gửi mã OTP qua email',
+      'OTP has been sent to your email': 'Mã OTP đã được gửi đến email của bạn',
+      'OTP is invalid or expired': 'Mã OTP không hợp lệ hoặc đã hết hạn',
+      'Invalid OTP': 'Mã OTP không đúng',
+      'Password reset successful': 'Đổi mật khẩu thành công',
     };
     
     // Check if message needs translation

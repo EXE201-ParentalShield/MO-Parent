@@ -6,6 +6,7 @@ import { getFreeTrialStatus } from '../api/freeTrial';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import TrialScreen from '../screens/TrialScreen';
 import DashboardScreen from '../screens/DashboardStoryScreen';
@@ -25,6 +26,7 @@ import VideoManagementScreen from '../screens/VideoManagementScreen';
 export type RootStackParamList = {
   FeatureIntroduction: undefined;
   Login: undefined;
+  ForgotPassword: undefined;
   Register: undefined;
   Trial: undefined;
   Dashboard: undefined;
@@ -134,6 +136,11 @@ export const AppNavigator = () => {
             <Stack.Screen 
               name="Login" 
               component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ForgotPassword"
+              component={ForgotPasswordScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen 
