@@ -18,7 +18,7 @@ import AddDeviceScreen from '../screens/AddDeviceScreen';
 import UpgradePackageScreen from '../screens/UpgradePackageScreen';
 import PaymentResultScreen from '../screens/PaymentResultScreen';
 import FeatureIntroductionScreen from '../screens/FeatureIntroductionScreen';
-import VNPayWebViewScreen from '../screens/VNPayWebViewScreen';
+import PayOSWebViewScreen from '../screens/PayOSWebViewScreen';
 import AppsManagementScreen from '../screens/AppsManagementScreen';
 import VideoManagementScreen from '../screens/VideoManagementScreen';
 
@@ -39,9 +39,9 @@ export type RootStackParamList = {
   CreateChildAccount: undefined;
   AddDevice: undefined;
   UpgradePackage: undefined;
-  VNPayWebView: {
+  PayOSWebView: {
     paymentUrl: string;
-    paymentId: number;
+    orderCode: number;
     token: string;
     packageName?: string;
   };
@@ -205,9 +205,9 @@ export const AppNavigator = () => {
               options={{ title: 'Nâng cấp gói' }}
             />
             <Stack.Screen
-              name="VNPayWebView"
-              component={VNPayWebViewScreen}
-              options={{ title: 'Thanh toán VNPay', headerBackTitle: 'Hủy' }}
+              name="PayOSWebView"
+              component={PayOSWebViewScreen}
+              options={{ title: 'Thanh toán PayOS', headerBackTitle: 'Hủy' }}
             />
             <Stack.Screen 
               name="PaymentResult" 

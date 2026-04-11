@@ -47,11 +47,8 @@ export const register = async (
     if (response.data.success && response.data.token) {
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
       await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(response.data.user));
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_LOGIN_AT, Date.now().toString());
       
-      // Log token for Swagger testing
-      console.log('\n🔑 TOKEN FOR SWAGGER:');
-      console.log(response.data.token);
-      console.log('\n');
     }
     
     return response.data;
@@ -71,14 +68,9 @@ export const login = async (username: string, password: string): Promise<LoginRe
     if (response.data.success && response.data.token) {
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, response.data.token);
       await AsyncStorage.setItem(STORAGE_KEYS.USER_DATA, JSON.stringify(response.data.user));
+      await AsyncStorage.setItem(STORAGE_KEYS.AUTH_LOGIN_AT, Date.now().toString());
       
-      console.log('[Auth.login] UserId being stored:', response.data.user.userId);
-      console.log('[Auth.login] User data:', JSON.stringify(response.data.user, null, 2));
-      
-      // Log token for Swagger testing
-      console.log('\n🔑 TOKEN FOR SWAGGER:');
-      console.log(response.data.token);
-      console.log('\n');
+
     }
     
     return response.data;
@@ -92,6 +84,7 @@ export const logout = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
     await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
+    await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_LOGIN_AT);
   } catch (error) {
     logError(error, 'Auth.logout');
     throw error;

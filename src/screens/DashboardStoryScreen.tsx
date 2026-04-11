@@ -249,10 +249,23 @@ const DashboardStoryScreen = ({ navigation }: DashboardScreenProps) => {
 
   const storyInsight = useMemo(() => {
     if (totalScreenTimeMinutes > 0) {
-      const hourText =
-        totalScreenTimeMinutes < 60
-          ? `${totalScreenTimeMinutes} phút`
-          : `${(totalScreenTimeMinutes / 60).toFixed(1)} giờ`;
+      const formatUsageDuration = (minutesInput: number) => {
+        const safeMinutes = Math.max(0, Math.floor(minutesInput));
+        if (safeMinutes < 60) {
+          return `${safeMinutes} phút`;
+        }
+
+        const hours = Math.floor(safeMinutes / 60);
+        const minutes = safeMinutes % 60;
+
+        if (minutes === 0) {
+          return `${hours} giờ`;
+        }
+
+        return `${hours} giờ ${minutes} phút`;
+      };
+
+      const hourText = formatUsageDuration(totalScreenTimeMinutes);
 
       const inSafeRange = totalScreenTimeMinutes <= SAFE_LIMIT_MINUTES;
 

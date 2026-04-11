@@ -15,12 +15,12 @@ import { COLORS } from '../utils/constants';
 import * as ExpoLinking from 'expo-linking';
 import { API_BASE_URL } from '../config/api';
 
-type VNPayWebViewScreenProps = {
-  navigation: NativeStackNavigationProp<RootStackParamList, 'VNPayWebView'>;
-  route: RouteProp<RootStackParamList, 'VNPayWebView'>;
+type PayOSWebViewScreenProps = {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'PayOSWebView'>;
+  route: RouteProp<RootStackParamList, 'PayOSWebView'>;
 };
 
-const VNPayWebViewScreen = ({ navigation, route }: VNPayWebViewScreenProps) => {
+const PayOSWebViewScreen = ({ navigation, route }: PayOSWebViewScreenProps) => {
   const { paymentUrl, orderCode, token, packageName } = route.params;
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
@@ -101,7 +101,7 @@ const VNPayWebViewScreen = ({ navigation, route }: VNPayWebViewScreenProps) => {
     }, 5000);
   };
 
-  // Lắng nghe URL thay đổi trong WebView để bắt redirect VNPay trả về
+  // Lắng nghe URL thay đổi trong WebView để bắt redirect từ PayOS.
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
     const url = navState.url || '';
 
@@ -264,4 +264,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default VNPayWebViewScreen;
+export default PayOSWebViewScreen;

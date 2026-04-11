@@ -125,14 +125,28 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
 
   const mapRegisterError = (message: string) => {
     const normalized = message.toLowerCase();
+    const isUsernameDuplicate =
+      (normalized.includes('username') && (normalized.includes('exists') || normalized.includes('tồn tại'))) ||
+      (normalized.includes('tên đăng nhập') && normalized.includes('tồn tại'));
+    const isEmailDuplicate =
+      (normalized.includes('email') && (normalized.includes('exists') || normalized.includes('registered') || normalized.includes('tồn tại'))) ||
+      (normalized.includes('email') && normalized.includes('đã tồn tại'));
+    const isPhoneDuplicate =
+      (normalized.includes('phone') && (normalized.includes('exists') || normalized.includes('registered') || normalized.includes('tồn tại'))) ||
+      (normalized.includes('số điện thoại') && normalized.includes('tồn tại'));
 
-    if (normalized.includes('username')) {
-      setErrors((prev) => ({ ...prev, username: message }));
+    if (isUsernameDuplicate) {
+      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập đã tồn tại' }));
+      return;
+    }
+
+    if (isEmailDuplicate) {
+      setErrors((prev) => ({ ...prev, email: 'Email đã tồn tại' }));
       return;
     }
 
     if (normalized.includes('email')) {
-      setErrors((prev) => ({ ...prev, email: message }));
+      setErrors((prev) => ({ ...prev, email: message || 'Email không hợp lệ' }));
       return;
     }
 
@@ -142,12 +156,17 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
     }
 
     if (normalized.includes('full name')) {
-      setErrors((prev) => ({ ...prev, fullName: message }));
+      setErrors((prev) => ({ ...prev, fullName: message || 'Họ và tên không hợp lệ' }));
+      return;
+    }
+
+    if (isPhoneDuplicate) {
+      setErrors((prev) => ({ ...prev, phoneNumber: 'Số điện thoại đã tồn tại' }));
       return;
     }
 
     if (normalized.includes('phone')) {
-      setErrors((prev) => ({ ...prev, phoneNumber: message }));
+      setErrors((prev) => ({ ...prev, phoneNumber: message || 'Số điện thoại không hợp lệ' }));
       return;
     }
 

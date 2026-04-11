@@ -11,7 +11,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../navigation/AppNavigator';
 import { COLORS } from '../utils/constants';
 import { storage } from '../utils/storage';
-import * as ExpoLinking from 'expo-linking';
 import { API_BASE_URL } from '../config/api';
 
 type UpgradePackageScreenProps = {
@@ -26,6 +25,8 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
       id: 1,
       name: 'Gói Ngày',
       price: '5.000đ',
+      amount: 5000,
+      description: 'Đăng kí gói 1 ngày ParentalShield',
       period: '/ngày',
       devices: 1,
       features: ['1 thiết bị', 'Theo dõi cơ bản', 'Hỗ trợ 24/7'],
@@ -35,6 +36,8 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
       id: 2,
       name: 'Gói Tuần',
       price: '19.000đ',
+      amount: 19000,
+      description: 'Đăng kí gói 1 tuần ParentalShield',
       period: '/tuần',
       devices: 1,
       features: ['1 thiết bị', 'Theo dõi đầy đủ', 'Báo cáo chi tiết', 'Hỗ trợ 24/7'],
@@ -44,6 +47,8 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
       id: 3,
       name: 'Gói Tháng',
       price: '39.000đ',
+      amount: 39000,
+      description: 'Đăng kí gói 1 tháng ParentalShield',
       period: '/tháng',
       devices: 2,
       features: [
@@ -88,14 +93,10 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
       if (!token)
         throw new Error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
 
-      const amount = Number(String(pkg.price).replace(/[^\d]/g, '')) || 0;
+      const amount = Number(pkg.amount) || 0;
       const orderId = `ORDER-${Date.now()}`;
 
-      // Lấy returnUrl động theo môi trường
-      const returnUrl = ExpoLinking.createURL('payment-result');
-      console.log('returnUrl:', returnUrl);
-
-      const res = await fetch(`${API_BASE_URL}/api/Payment/vnpay-create`, {
+      const res = await fetch(`${API_BASE_URL}/api/Payment/create`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -105,9 +106,8 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
           userId,
           amount,
           orderId,
-          description: `Nâng cấp ${pkg.name}`,
+          description: pkg.description,
           provider: 1,
-          returnUrl,
         }),
       });
 
@@ -119,23 +119,25 @@ const UpgradePackageScreen = ({ navigation }: UpgradePackageScreenProps) => {
       }
 
       const data = await res.json();
-      const paymentId: number | null =
-        data?.data?.paymentId ?? data?.data?.id ?? null;
+      const orderCode: number | null =
+        data?.data?.orderCode ?? null;
       const paymentUrl: string | null =
+        data?.data?.checkoutUrl ||
         data?.data?.paymentUrl ||
         data?.paymentUrl ||
         data?.url ||
         data?.redirectUrl ||
+        data?.checkoutUrl ||
         null;
 
       if (!paymentUrl)
         throw new Error('Không nhận được URL thanh toán từ máy chủ');
-      if (!paymentId)
-        throw new Error('Không nhận được mã thanh toán từ máy chủ');
+      if (!orderCode)
+        throw new Error('Không nhận được mã đơn hàng từ máy chủ');
 
-      navigation.navigate('VNPayWebView', {
+      navigation.navigate('PayOSWebView', {
         paymentUrl,
-        paymentId,
+        orderCode,
         token,
         packageName: pkg.name,
       });

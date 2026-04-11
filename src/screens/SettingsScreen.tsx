@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { COLORS } from '../utils/constants';
@@ -7,8 +7,6 @@ import { getFreeTrialStatus, FreeTrialStatus } from '../api/freeTrial';
 
 const SettingsScreen = () => {
   const { logout, user } = useAuth();
-  const [notifications, setNotifications] = React.useState(true);
-  const [safeMode, setSafeMode] = React.useState(true);
   const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
   const [loadingTrial, setLoadingTrial] = useState(false);
 
@@ -148,33 +146,6 @@ const SettingsScreen = () => {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cài đặt bảo vệ</Text>
-          <View style={styles.card}>
-            <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Chế độ an toàn</Text>
-              <Switch value={safeMode} onValueChange={setSafeMode} />
-            </View>
-            <View style={styles.settingRow}>
-              <Text style={styles.settingLabel}>Thông báo</Text>
-              <Switch value={notifications} onValueChange={setNotifications} />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Giới hạn thời gian</Text>
-          <View style={styles.card}>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Giới hạn hàng ngày:</Text>
-              <Text style={styles.infoValue}>4 giờ</Text>
-            </View>
-            <TouchableOpacity style={styles.editButton}>
-              <Text style={styles.editButtonText}>Chỉnh sửa</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutButtonText}>Đăng xuất</Text>
         </TouchableOpacity>
@@ -224,28 +195,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.text,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  settingLabel: {
-    fontSize: 14,
-    color: COLORS.text,
-  },
-  editButton: {
-    backgroundColor: COLORS.primary,
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  editButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
   },
   refreshButton: {
     backgroundColor: '#22c55e',

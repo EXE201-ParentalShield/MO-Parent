@@ -40,6 +40,7 @@ export const API_ENDPOINTS = {
 export const STORAGE_KEYS = {
   TOKEN: '@shield_parent_token',
   USER_DATA: '@shield_parent_user',
+  AUTH_LOGIN_AT: '@shield_parent_auth_login_at',
   SETTINGS: '@shield_parent_settings',
   ACTIVITY_BADGE_LAST_SEEN_AT: '@shield_parent_activity_badge_last_seen_at',
 };
