@@ -27,6 +27,11 @@ export interface LoginResponse {
   token: string;
 }
 
+interface BasicApiResponse {
+  success: boolean;
+  message: string;
+}
+
 export const register = async (
   username: string,
   password: string,
@@ -88,5 +93,39 @@ export const logout = async (): Promise<void> => {
   } catch (error) {
     logError(error, 'Auth.logout');
     throw error;
+  }
+};
+
+export const sendForgotPasswordOtp = async (email: string): Promise<BasicApiResponse> => {
+  try {
+    const response = await apiClient.post<BasicApiResponse>('/auth/forgot-password/send-otp', {
+      email,
+    });
+
+    return response.data;
+  } catch (error) {
+    logError(error, 'Auth.sendForgotPasswordOtp');
+    throw new Error(handleApiError(error));
+  }
+};
+
+export const resetPasswordWithOtp = async (
+  email: string,
+  otpCode: string,
+  newPassword: string,
+  confirmPassword: string
+): Promise<BasicApiResponse> => {
+  try {
+    const response = await apiClient.post<BasicApiResponse>('/auth/forgot-password/reset', {
+      email,
+      otpCode,
+      newPassword,
+      confirmPassword,
+    });
+
+    return response.data;
+  } catch (error) {
+    logError(error, 'Auth.resetPasswordWithOtp');
+    throw new Error(handleApiError(error));
   }
 };
