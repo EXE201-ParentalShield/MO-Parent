@@ -67,18 +67,13 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const mapLoginError = (message: string) => {
     const normalized = message.toLowerCase();
 
+    const isGenericCredentialError =
+      normalized.includes('invalid credentials') ||
+      normalized.includes('invalid username or password') ||
+      normalized.includes('tên đăng nhập hoặc mật khẩu không đúng');
+
     if (normalized.includes('username') && normalized.includes('required')) {
       setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không được để trống' }));
-      return;
-    }
-
-    if (normalized.includes('username') && (normalized.includes('not found') || normalized.includes('không tồn tại'))) {
-      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không đúng' }));
-      return;
-    }
-
-    if (normalized.includes('invalid username')) {
-      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không đúng' }));
       return;
     }
 
@@ -92,7 +87,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    if (normalized.includes('invalid credentials') || normalized.includes('invalid username or password')) {
+    if (isGenericCredentialError) {
       setErrors((prev) => ({
         ...prev,
         username: 'Tên đăng nhập hoặc mật khẩu không đúng',
@@ -101,16 +96,17 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
       return;
     }
 
-    if (normalized.includes('tên đăng nhập hoặc mật khẩu không đúng')) {
-      setErrors((prev) => ({
-        ...prev,
-        username: 'Tên đăng nhập hoặc mật khẩu không đúng',
-        password: 'Tên đăng nhập hoặc mật khẩu không đúng',
-      }));
+    if (normalized.includes('username') && (normalized.includes('not found') || normalized.includes('không tồn tại'))) {
+      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không đúng' }));
       return;
     }
 
-    setFormError(message || 'Đăng nhập thất bại. Vui lòng thử lại.');
+    if (normalized === 'invalid username') {
+      setErrors((prev) => ({ ...prev, username: 'Tên đăng nhập không đúng' }));
+      return;
+    }
+
+    setErrors((prev) => ({ ...prev, password: message || 'Đăng nhập thất bại. Vui lòng thử lại.' }));
   };
 
   const handleLogin = async () => {

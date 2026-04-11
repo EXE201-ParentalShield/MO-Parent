@@ -39,6 +39,7 @@ apiClient.interceptors.response.use(
       try {
         await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
         await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
+        await AsyncStorage.removeItem(STORAGE_KEYS.AUTH_LOGIN_AT);
         // Navigation will be handled by AuthContext
       } catch (e) {
         console.error('Error clearing auth:', e);

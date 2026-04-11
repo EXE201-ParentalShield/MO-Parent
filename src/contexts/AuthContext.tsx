@@ -20,6 +20,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_TTL_MS = 30 * 60 * 1000;
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -31,9 +32,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      // Always start unauthenticated on fresh app launch.
-      await storage.clearAll();
-      setUser(null);
+      const [token, userData, loginAtRaw] = await Promise.all([
+        storage.getToken(),
+        storage.getUserData(),
+        storage.getTokenLoginAt(),
+      ]);
+
+      if (!token || !userData || !loginAtRaw) {
+        await storage.clearAll();
+        setUser(null);
+        return;
+      }
+
+      const loginAt = Number(loginAtRaw);
+      const isLoginAtValid = Number.isFinite(loginAt) && loginAt > 0;
+      const isExpired = !isLoginAtValid || Date.now() - loginAt > AUTH_TTL_MS;
+
+      if (isExpired) {
+        await storage.clearAll();
+        setUser(null);
+        return;
+      }
+
+      setUser(userData);
     } catch (error) {
       console.error('Error checking auth:', error);
     } finally {

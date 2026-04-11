@@ -15,6 +15,9 @@ export const handleApiError = (error: any): string => {
       'User not found': 'Không tìm thấy người dùng',
       'Username already exists': 'Tên đăng nhập đã tồn tại',
       'Email already exists': 'Email đã tồn tại',
+      'Email already registered': 'Email đã tồn tại',
+      'Phone number already exists': 'Số điện thoại đã tồn tại',
+      'Phone already exists': 'Số điện thoại đã tồn tại',
     };
     
     // Check if message needs translation

@@ -4,7 +4,6 @@ import {
   Alert,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -22,8 +21,6 @@ type SettingsStoryScreenProps = {
 
 const SettingsStoryScreen = ({ navigation }: SettingsStoryScreenProps) => {
   const { logout, user } = useAuth();
-  const [notifications, setNotifications] = useState(true);
-  const [safeMode, setSafeMode] = useState(true);
   const [trialStatus, setTrialStatus] = useState<FreeTrialStatus | null>(null);
   const [loadingTrial, setLoadingTrial] = useState(false);
 
@@ -112,46 +109,6 @@ const SettingsStoryScreen = ({ navigation }: SettingsStoryScreenProps) => {
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Email</Text>
             <Text style={styles.infoValue}>{user?.email || 'Chưa có thông tin'}</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Cài đặt bảo vệ</Text>
-        <View style={styles.card}>
-          <View style={styles.settingRow}>
-            <View style={styles.settingText}>
-              <Text style={styles.settingTitle}>Chế độ an toàn</Text>
-              <Text style={styles.settingDescription}>Giữ trải nghiệm của con trong vùng an toàn hơn.</Text>
-            </View>
-            <Switch value={safeMode} onValueChange={setSafeMode} trackColor={{ true: '#BFDBFE' }} />
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.settingRow}>
-            <View style={styles.settingText}>
-              <Text style={styles.settingTitle}>Thông báo cho phụ huynh</Text>
-              <Text style={styles.settingDescription}>
-                Nhận nhắc nhở khi có yêu cầu hoặc thay đổi quan trọng.
-              </Text>
-            </View>
-            <Switch value={notifications} onValueChange={setNotifications} trackColor={{ true: '#BFDBFE' }} />
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Giới hạn thời gian màn hình</Text>
-        <View style={styles.card}>
-          <View style={styles.limitRow}>
-            <View style={styles.limitText}>
-              <Text style={styles.limitValue}>4 giờ / ngày</Text>
-              <Text style={styles.settingDescription}>
-                Giới hạn hiện tại đang được hiển thị theo cấu hình sẵn có.
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.editButton}>
-              <Text style={styles.editButtonText}>Chỉnh sửa</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </View>
@@ -334,51 +291,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
   },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 16,
-  },
-  settingText: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 4,
-  },
   settingDescription: {
     fontSize: 13,
     lineHeight: 19,
     color: COLORS.textSecondary,
-  },
-  limitRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 16,
-  },
-  limitText: {
-    flex: 1,
-  },
-  limitValue: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.text,
-    marginBottom: 4,
-  },
-  editButton: {
-    backgroundColor: '#DBEAFE',
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  editButtonText: {
-    color: COLORS.primaryDark,
-    fontWeight: '800',
-    fontSize: 14,
   },
   highlightValue: {
     color: COLORS.primaryDark,
