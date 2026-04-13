@@ -4,6 +4,7 @@
     "slug": "shield-parent-app",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "shieldfamily",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -18,6 +19,7 @@
     "android": {
       "package": "com.shieldfamily.parent",
       "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#3b82f6"
@@ -32,11 +34,6 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    },
-    "extra": {
-      "eas": {
-        "projectId": "shield-parent-app"
-      }
     }
   }
 }

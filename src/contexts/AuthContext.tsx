@@ -1,21 +1,26 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { storage } from '../utils/storage';
+import * as authApi from '../api/auth';
 
 interface User {
-  id: string;
-  name: string;
+  userId: number;
+  username: string;
+  fullName: string;
   email: string;
+  role: string;
 }
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<void>;
+  register: (username: string, password: string, fullName: string, email: string, phoneNumber?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AUTH_TTL_MS = 30 * 60 * 1000;
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -27,12 +32,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      const token = await storage.getToken();
-      const userData = await storage.getUserData();
-      
-      if (token && userData) {
-        setUser(userData);
+      const [token, userData, loginAtRaw] = await Promise.all([
+        storage.getToken(),
+        storage.getUserData(),
+        storage.getTokenLoginAt(),
+      ]);
+
+      if (!token || !userData || !loginAtRaw) {
+        await storage.clearAll();
+        setUser(null);
+        return;
       }
+
+      const loginAt = Number(loginAtRaw);
+      const isLoginAtValid = Number.isFinite(loginAt) && loginAt > 0;
+      const isExpired = !isLoginAtValid || Date.now() - loginAt > AUTH_TTL_MS;
+
+      if (isExpired) {
+        await storage.clearAll();
+        setUser(null);
+        return;
+      }
+
+      setUser(userData);
     } catch (error) {
       console.error('Error checking auth:', error);
     } finally {
@@ -40,34 +62,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (username: string, password: string) => {
     try {
-      // TODO: Replace with actual API call
-      const mockUser = {
-        id: '1',
-        name: 'Phụ Huynh',
-        email: email,
-      };
+      const response = await authApi.login(username, password);
       
-      await storage.saveToken('mock-token-parent');
-      await storage.saveUserData(mockUser);
-      setUser(mockUser);
+      // Data already saved to AsyncStorage by auth.ts
+      setUser(response.user);
     } catch (error) {
       console.error('Login error:', error);
       throw error;
     }
   };
 
-  const logout = async () => {
+  const register = async (username: string, password: string, fullName: string, email: string, phoneNumber?: string) => {
     try {
-      await storage.clearAll();
-      setUser(null);
+      const response = await authApi.register(username, password, fullName, email, phoneNumber);
+      
+      // Data already saved to AsyncStorage by auth.ts
+      setUser(response.user);
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('Register error:', error);
       throw error;
     }
   };
 
+  const logout = async () => {
+    try {
+      await authApi.logout();
+      setUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Clear local state even if API call fails
+      await storage.clearAll();
+      setUser(null);
+    }
+  };
+        
   return (
     <AuthContext.Provider
       value={{
@@ -75,6 +105,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isAuthenticated: !!user,
         isLoading,
         login,
+        register,
         logout,
       }}
     >

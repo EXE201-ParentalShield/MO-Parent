@@ -1,55 +1,166 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
+import { getFreeTrialStatus } from '../api/freeTrial';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
-import DashboardScreen from '../screens/DashboardScreen';
-import ActivityScreen from '../screens/ActivityScreen';
+import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
+import RegisterScreen from '../screens/RegisterScreen';
+import TrialScreen from '../screens/TrialScreen';
+import DashboardScreen from '../screens/DashboardStoryScreen';
+import ActivityScreen from '../screens/ActivityStoryScreen';
 import DevicesScreen from '../screens/DevicesScreen';
-import AccessRequestsScreen from '../screens/AccessRequestsScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+import AccessRequestsScreen from '../screens/AccessRequestsStoryScreen';
+import SettingsScreen from '../screens/SettingsStoryScreen';
+import CreateChildAccountScreen from '../screens/CreateChildAccountScreen';
+import AddDeviceScreen from '../screens/AddDeviceScreen';
+import UpgradePackageScreen from '../screens/UpgradePackageScreen';
+import PaymentResultScreen from '../screens/PaymentResultScreen';
+import FeatureIntroductionScreen from '../screens/FeatureIntroductionScreen';
+import PayOSWebViewScreen from '../screens/PayOSWebViewScreen';
+import AppsManagementScreen from '../screens/AppsManagementScreen';
+import VideoManagementScreen from '../screens/VideoManagementScreen';
 
 export type RootStackParamList = {
+  FeatureIntroduction: undefined;
   Login: undefined;
+  ForgotPassword: undefined;
+  Register: undefined;
+  Trial: undefined;
   Dashboard: undefined;
   Activity: undefined;
   Devices: undefined;
   AccessRequests: undefined;
   Settings: undefined;
+  AppsManagement: undefined;
+  VideoManagement: {
+    appName?: string;
+  };
+  CreateChildAccount: undefined;
+  AddDevice: undefined;
+  UpgradePackage: undefined;
+  PayOSWebView: {
+    paymentUrl: string;
+    orderCode: number;
+    token: string;
+    packageName?: string;
+  };
+  PaymentResult: {
+    success: boolean;
+    packageName?: string;
+    amount?: string;
+    transactionNo?: string;
+    paidAt?: string;
+  };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export const AppNavigator = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const [initialAuthenticatedRoute, setInitialAuthenticatedRoute] = useState<'Dashboard' | 'Trial'>('Dashboard');
+  const [isResolvingInitialRoute, setIsResolvingInitialRoute] = useState(false);
 
-  if (isLoading) {
+  useEffect(() => {
+    let isMounted = true;
+
+    const resolveInitialRoute = async () => {
+      if (!isAuthenticated) {
+        if (isMounted) {
+          setInitialAuthenticatedRoute('Dashboard');
+          setIsResolvingInitialRoute(false);
+        }
+        return;
+      }
+
+      if (isMounted) {
+        setIsResolvingInitialRoute(true);
+      }
+
+      try {
+        const trialStatus = await getFreeTrialStatus();
+        if (isMounted) {
+          setInitialAuthenticatedRoute(trialStatus.hasTrial ? 'Dashboard' : 'Trial');
+        }
+      } catch (error) {
+        console.error('[AppNavigator] Failed to resolve initial route:', error);
+        if (isMounted) {
+          setInitialAuthenticatedRoute('Dashboard');
+        }
+      } finally {
+        if (isMounted) {
+          setIsResolvingInitialRoute(false);
+        }
+      }
+    };
+
+    resolveInitialRoute();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
+  if (isLoading || (isAuthenticated && isResolvingInitialRoute)) {
     return null; // or a loading screen
   }
 
   return (
     <NavigationContainer>
       <Stack.Navigator
+        key={isAuthenticated ? 'authenticated' : 'unauthenticated'}
+        initialRouteName={isAuthenticated ? initialAuthenticatedRoute : 'Login'}
         screenOptions={{
           headerStyle: {
-            backgroundColor: '#3b82f6',
+            backgroundColor: '#3B82F6',
           },
+          headerShadowVisible: false,
           headerTintColor: '#fff',
           headerTitleStyle: {
-            fontWeight: 'bold',
+            fontWeight: '700',
+          },
+          contentStyle: {
+            backgroundColor: '#F9FAFB',
           },
         }}
       >
         {!isAuthenticated ? (
-          <Stack.Screen 
-            name="Login" 
-            component={LoginScreen}
-            options={{ headerShown: false }}
-          />
+          <>
+            <Stack.Screen 
+              name="FeatureIntroduction" 
+              component={FeatureIntroductionScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="Login" 
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ForgotPassword"
+              component={ForgotPasswordScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="Register" 
+              component={RegisterScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen 
+              name="Trial" 
+              component={TrialScreen}
+              options={{ headerShown: false }}
+            />
+          </>
         ) : (
           <>
+            <Stack.Screen 
+              name="Trial" 
+              component={TrialScreen}
+              options={{ headerShown: false }}
+            />
             <Stack.Screen 
               name="Dashboard" 
               component={DashboardScreen}
@@ -74,6 +185,41 @@ export const AppNavigator = () => {
               name="Settings" 
               component={SettingsScreen}
               options={{ title: 'Cài đặt' }}
+            />
+            <Stack.Screen
+              name="AppsManagement"
+              component={AppsManagementScreen}
+              options={{ title: 'Quản lý ứng dụng' }}
+            />
+            <Stack.Screen
+              name="VideoManagement"
+              component={VideoManagementScreen}
+              options={{ title: 'Quản lý video YouTube' }}
+            />
+            <Stack.Screen 
+              name="CreateChildAccount" 
+              component={CreateChildAccountScreen}
+              options={{ title: 'Tạo tài khoản trẻ em' }}
+            />
+            <Stack.Screen 
+              name="AddDevice" 
+              component={AddDeviceScreen}
+              options={{ title: 'Thêm thiết bị' }}
+            />
+            <Stack.Screen 
+              name="UpgradePackage" 
+              component={UpgradePackageScreen}
+              options={{ title: 'Nâng cấp gói' }}
+            />
+            <Stack.Screen
+              name="PayOSWebView"
+              component={PayOSWebViewScreen}
+              options={{ title: 'Thanh toán PayOS', headerBackTitle: 'Hủy' }}
+            />
+            <Stack.Screen 
+              name="PaymentResult" 
+              component={PaymentResultScreen}
+              options={{ title: 'Kết quả thanh toán' }}
             />
           </>
         )}
