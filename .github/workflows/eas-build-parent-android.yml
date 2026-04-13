@@ -1,0 +1,42 @@
+name: Parent App Android APK (EAS)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**"
+  workflow_dispatch:
+
+jobs:
+  build-android-apk:
+    name: Build parent APK on EAS
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Ensure EAS project is linked
+        run: eas project:info --non-interactive || eas project:init --non-interactive
+
+      - name: Trigger EAS Android APK build (preview)
+        run: eas build --platform android --profile preview --non-interactive
