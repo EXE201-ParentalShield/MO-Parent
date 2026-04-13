@@ -36,7 +36,7 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Ensure EAS project is linked
-        run: eas project:info --non-interactive || eas project:init --non-interactive
+        run: eas project:info --non-interactive || eas project:init --non-interactive --force
 
       - name: Trigger EAS Android APK build (preview)
         run: eas build --platform android --profile preview --non-interactive
